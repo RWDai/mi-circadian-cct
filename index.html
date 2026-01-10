@@ -13,87 +13,181 @@
 <body class="bg-gray-50 dark:bg-neutral-900 min-h-screen">
     <div class="max-w-2xl mx-auto px-4 py-8">
         <header class="flex justify-between items-center mb-6">
-            <h1 class="text-xl font-semibold text-gray-800 dark:text-white">色温曲线生成器</h1>
+            <h1 class="text-xl font-semibold text-gray-800 dark:text-white">昼夜节律曲线生成器</h1>
             <button onclick="toggleTheme()"
                 class="p-2 rounded-lg bg-white dark:bg-neutral-800 border border-gray-200 dark:border-neutral-700 hover:bg-gray-100 dark:hover:bg-neutral-700">
                 <span id="themeIcon">🌙</span>
             </button>
         </header>
 
-        <!-- 参数设置 -->
-        <div
-            class="bg-white dark:bg-neutral-800 border border-gray-200 dark:border-neutral-700 rounded-xl p-5 mb-4 shadow-sm">
-            <div class="grid grid-cols-2 gap-4 mb-4">
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 dark:text-neutral-300 mb-1.5">
-                        纬度 <a href="https://cnbj1.fds.api.xiaomi.com/mijia-tob/prod/ai-config/pos-v2/index.html"
-                            target="_blank" class="text-blue-600 hover:underline text-xs">(查询)</a>
-                    </label>
-                    <input type="number" id="latitude" step="0.001" placeholder="如: 39.904"
-                        class="py-2.5 px-3 block w-full border border-gray-200 dark:border-neutral-700 rounded-lg text-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-neutral-900 dark:text-neutral-400">
+        <!-- Tab 切换 -->
+        <div class="flex gap-2 mb-4">
+            <button id="tabCCT" onclick="switchTab('cct')"
+                class="flex-1 py-2.5 px-4 text-sm font-medium rounded-lg border transition-colors">
+                色温曲线
+            </button>
+            <button id="tabBrightness" onclick="switchTab('brightness')"
+                class="flex-1 py-2.5 px-4 text-sm font-medium rounded-lg border transition-colors">
+                亮度曲线
+            </button>
+        </div>
+
+        <!-- 色温面板 -->
+        <div id="panelCCT">
+            <!-- 参数设置 -->
+            <div
+                class="bg-white dark:bg-neutral-800 border border-gray-200 dark:border-neutral-700 rounded-xl p-5 mb-4 shadow-sm">
+                <div class="grid grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-neutral-300 mb-1.5">
+                            纬度 <a href="https://cnbj1.fds.api.xiaomi.com/mijia-tob/prod/ai-config/pos-v2/index.html"
+                                target="_blank" class="text-blue-600 hover:underline text-xs">(查询)</a>
+                        </label>
+                        <input type="number" id="latitude" step="0.001" placeholder="如: 39.904"
+                            class="py-2.5 px-3 block w-full border border-gray-200 dark:border-neutral-700 rounded-lg text-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-neutral-900 dark:text-neutral-400">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-neutral-300 mb-1.5">过渡陡度 (k)</label>
+                        <input type="number" id="steepness" value="5" step="0.5" min="1" max="20"
+                            class="py-2.5 px-3 block w-full border border-gray-200 dark:border-neutral-700 rounded-lg text-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-neutral-900 dark:text-neutral-400">
+                    </div>
                 </div>
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 dark:text-neutral-300 mb-1.5">过渡陡度 (k)</label>
-                    <input type="number" id="steepness" value="5" step="0.5" min="1" max="20"
-                        class="py-2.5 px-3 block w-full border border-gray-200 dark:border-neutral-700 rounded-lg text-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-neutral-900 dark:text-neutral-400">
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-neutral-300 mb-1.5">最低色温 (K)</label>
+                        <input type="number" id="minTemp" value="2700"
+                            class="py-2.5 px-3 block w-full border border-gray-200 dark:border-neutral-700 rounded-lg text-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-neutral-900 dark:text-neutral-400">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-neutral-300 mb-1.5">最高色温 (K)</label>
+                        <input type="number" id="maxTemp" value="6500"
+                            class="py-2.5 px-3 block w-full border border-gray-200 dark:border-neutral-700 rounded-lg text-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-neutral-900 dark:text-neutral-400">
+                    </div>
                 </div>
             </div>
-            <div class="grid grid-cols-2 gap-4">
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 dark:text-neutral-300 mb-1.5">最低色温 (K)</label>
-                    <input type="number" id="minTemp" value="2700"
-                        class="py-2.5 px-3 block w-full border border-gray-200 dark:border-neutral-700 rounded-lg text-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-neutral-900 dark:text-neutral-400">
+
+            <!-- 曲线预览 -->
+            <div
+                class="bg-white dark:bg-neutral-800 border border-gray-200 dark:border-neutral-700 rounded-xl p-5 mb-4 shadow-sm">
+                <div class="flex justify-between items-center mb-3">
+                    <h3 class="text-sm font-medium text-gray-800 dark:text-white">曲线编辑器</h3>
+                    <div class="flex gap-4 text-xs text-gray-500 dark:text-neutral-400">
+                        <span>日出: <b id="sunrise" class="text-gray-800 dark:text-white">--:--</b></span>
+                        <span>日落: <b id="sunset" class="text-gray-800 dark:text-white">--:--</b></span>
+                    </div>
                 </div>
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 dark:text-neutral-300 mb-1.5">最高色温 (K)</label>
-                    <input type="number" id="maxTemp" value="6500"
-                        class="py-2.5 px-3 block w-full border border-gray-200 dark:border-neutral-700 rounded-lg text-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-neutral-900 dark:text-neutral-400">
+                <p class="text-xs text-gray-400 dark:text-neutral-500 mb-2">点击添加关键帧 | 拖动调整 | 双击删除</p>
+                <div class="bg-gray-50 dark:bg-neutral-900 rounded-lg p-2">
+                    <canvas id="canvas" class="w-full rounded cursor-crosshair" style="height:180px"></canvas>
                 </div>
+            </div>
+
+            <!-- 关键帧列表 -->
+            <div
+                class="bg-white dark:bg-neutral-800 border border-gray-200 dark:border-neutral-700 rounded-xl p-5 mb-4 shadow-sm">
+                <div class="flex justify-between items-center mb-3">
+                    <h3 class="text-sm font-medium text-gray-800 dark:text-white">关键帧 <span
+                            class="text-xs text-gray-400 font-normal">(可直接编辑)</span></h3>
+                    <div class="flex gap-3">
+                        <button onclick="addKeyframe()" class="text-xs text-blue-600 hover:underline">+ 添加</button>
+                        <button onclick="resetKeyframes()" class="text-xs text-gray-500 hover:underline">重置</button>
+                    </div>
+                </div>
+                <div id="keyframeList" class="space-y-2 max-h-48 overflow-y-auto"></div>
+            </div>
+
+            <!-- 公式输出 -->
+            <div
+                class="bg-white dark:bg-neutral-800 border border-gray-200 dark:border-neutral-700 rounded-xl p-5 shadow-sm">
+                <div class="flex justify-between items-center mb-3">
+                    <h3 class="text-sm font-medium text-gray-800 dark:text-white">米家极客版公式</h3>
+                    <button onclick="copyFormula()"
+                        class="py-1.5 px-3 text-xs font-medium rounded-lg border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-gray-800 dark:text-white hover:bg-gray-50 dark:hover:bg-neutral-700">复制</button>
+                </div>
+                <div id="formula"
+                    class="p-3 bg-gray-50 dark:bg-neutral-900 rounded-lg font-mono text-xs text-gray-600 dark:text-neutral-400 whitespace-pre-wrap break-all max-h-36 overflow-y-auto select-all">
+                </div>
+                <p id="formulaLen" class="text-xs text-gray-400 mt-2"></p>
             </div>
         </div>
 
-        <!-- 曲线预览 -->
-        <div
-            class="bg-white dark:bg-neutral-800 border border-gray-200 dark:border-neutral-700 rounded-xl p-5 mb-4 shadow-sm">
-            <div class="flex justify-between items-center mb-3">
-                <h3 class="text-sm font-medium text-gray-800 dark:text-white">曲线编辑器</h3>
-                <div class="flex gap-4 text-xs text-gray-500 dark:text-neutral-400">
-                    <span>日出: <b id="sunrise" class="text-gray-800 dark:text-white">--:--</b></span>
-                    <span>日落: <b id="sunset" class="text-gray-800 dark:text-white">--:--</b></span>
+        <!-- 亮度面板 -->
+        <div id="panelBrightness" class="hidden">
+            <!-- 参数设置 -->
+            <div
+                class="bg-white dark:bg-neutral-800 border border-gray-200 dark:border-neutral-700 rounded-xl p-5 mb-4 shadow-sm">
+                <div class="grid grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-neutral-300 mb-1.5">
+                            纬度 <a href="https://cnbj1.fds.api.xiaomi.com/mijia-tob/prod/ai-config/pos-v2/index.html"
+                                target="_blank" class="text-blue-600 hover:underline text-xs">(查询)</a>
+                        </label>
+                        <input type="number" id="latitudeBri" step="0.001" placeholder="如: 39.904"
+                            class="py-2.5 px-3 block w-full border border-gray-200 dark:border-neutral-700 rounded-lg text-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-neutral-900 dark:text-neutral-400">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-neutral-300 mb-1.5">过渡陡度 (k)</label>
+                        <input type="number" id="steepnessBri" value="5" step="0.5" min="1" max="20"
+                            class="py-2.5 px-3 block w-full border border-gray-200 dark:border-neutral-700 rounded-lg text-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-neutral-900 dark:text-neutral-400">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-neutral-300 mb-1.5">最低亮度 (%)</label>
+                        <input type="number" id="minBri" value="1" min="0" max="99"
+                            class="py-2.5 px-3 block w-full border border-gray-200 dark:border-neutral-700 rounded-lg text-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-neutral-900 dark:text-neutral-400">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-neutral-300 mb-1.5">最高亮度 (%)</label>
+                        <input type="number" id="maxBri" value="100" disabled
+                            class="py-2.5 px-3 block w-full border border-gray-200 dark:border-neutral-700 rounded-lg text-sm bg-gray-100 dark:bg-neutral-700 dark:text-neutral-500 cursor-not-allowed">
+                    </div>
                 </div>
             </div>
-            <p class="text-xs text-gray-400 dark:text-neutral-500 mb-2">点击添加关键帧 | 拖动调整 | 双击删除</p>
-            <div class="bg-gray-50 dark:bg-neutral-900 rounded-lg p-2">
-                <canvas id="canvas" class="w-full rounded cursor-crosshair" style="height:180px"></canvas>
-            </div>
-        </div>
 
-        <!-- 关键帧列表 -->
-        <div
-            class="bg-white dark:bg-neutral-800 border border-gray-200 dark:border-neutral-700 rounded-xl p-5 mb-4 shadow-sm">
-            <div class="flex justify-between items-center mb-3">
-                <h3 class="text-sm font-medium text-gray-800 dark:text-white">关键帧 <span
-                        class="text-xs text-gray-400 font-normal">(可直接编辑)</span></h3>
-                <div class="flex gap-3">
-                    <button onclick="addKeyframe()" class="text-xs text-blue-600 hover:underline">+ 添加</button>
-                    <button onclick="resetKeyframes()" class="text-xs text-gray-500 hover:underline">重置</button>
+            <!-- 曲线预览 -->
+            <div
+                class="bg-white dark:bg-neutral-800 border border-gray-200 dark:border-neutral-700 rounded-xl p-5 mb-4 shadow-sm">
+                <div class="flex justify-between items-center mb-3">
+                    <h3 class="text-sm font-medium text-gray-800 dark:text-white">曲线编辑器</h3>
+                    <div class="flex gap-4 text-xs text-gray-500 dark:text-neutral-400">
+                        <span>日出: <b id="sunriseBri" class="text-gray-800 dark:text-white">--:--</b></span>
+                        <span>日落: <b id="sunsetBri" class="text-gray-800 dark:text-white">--:--</b></span>
+                    </div>
+                </div>
+                <p class="text-xs text-gray-400 dark:text-neutral-500 mb-2">点击添加关键帧 | 拖动调整 | 双击删除</p>
+                <div class="bg-gray-50 dark:bg-neutral-900 rounded-lg p-2">
+                    <canvas id="canvasBri" class="w-full rounded cursor-crosshair" style="height:180px"></canvas>
                 </div>
             </div>
-            <div id="keyframeList" class="space-y-2 max-h-48 overflow-y-auto"></div>
-        </div>
 
-        <!-- 公式输出 -->
-        <div
-            class="bg-white dark:bg-neutral-800 border border-gray-200 dark:border-neutral-700 rounded-xl p-5 shadow-sm">
-            <div class="flex justify-between items-center mb-3">
-                <h3 class="text-sm font-medium text-gray-800 dark:text-white">米家极客版公式</h3>
-                <button onclick="copyFormula()"
-                    class="py-1.5 px-3 text-xs font-medium rounded-lg border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-gray-800 dark:text-white hover:bg-gray-50 dark:hover:bg-neutral-700">复制</button>
+            <!-- 关键帧列表 -->
+            <div
+                class="bg-white dark:bg-neutral-800 border border-gray-200 dark:border-neutral-700 rounded-xl p-5 mb-4 shadow-sm">
+                <div class="flex justify-between items-center mb-3">
+                    <h3 class="text-sm font-medium text-gray-800 dark:text-white">关键帧 <span
+                            class="text-xs text-gray-400 font-normal">(可直接编辑)</span></h3>
+                    <div class="flex gap-3">
+                        <button onclick="addKeyframeBri()" class="text-xs text-blue-600 hover:underline">+ 添加</button>
+                        <button onclick="resetKeyframesBri()" class="text-xs text-gray-500 hover:underline">重置</button>
+                    </div>
+                </div>
+                <div id="keyframeListBri" class="space-y-2 max-h-48 overflow-y-auto"></div>
             </div>
-            <div id="formula"
-                class="p-3 bg-gray-50 dark:bg-neutral-900 rounded-lg font-mono text-xs text-gray-600 dark:text-neutral-400 whitespace-pre-wrap break-all max-h-36 overflow-y-auto select-all">
+
+            <!-- 公式输出 -->
+            <div
+                class="bg-white dark:bg-neutral-800 border border-gray-200 dark:border-neutral-700 rounded-xl p-5 shadow-sm">
+                <div class="flex justify-between items-center mb-3">
+                    <h3 class="text-sm font-medium text-gray-800 dark:text-white">米家极客版公式</h3>
+                    <button onclick="copyFormulaBri()"
+                        class="py-1.5 px-3 text-xs font-medium rounded-lg border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-gray-800 dark:text-white hover:bg-gray-50 dark:hover:bg-neutral-700">复制</button>
+                </div>
+                <div id="formulaBri"
+                    class="p-3 bg-gray-50 dark:bg-neutral-900 rounded-lg font-mono text-xs text-gray-600 dark:text-neutral-400 whitespace-pre-wrap break-all max-h-36 overflow-y-auto select-all">
+                </div>
+                <p id="formulaLenBri" class="text-xs text-gray-400 mt-2"></p>
             </div>
-            <p id="formulaLen" class="text-xs text-gray-400 mt-2"></p>
         </div>
 
         <footer class="text-center mt-6 text-xs text-gray-400 dark:text-neutral-500">
@@ -109,10 +203,34 @@
             document.getElementById('themeIcon').textContent = d ? '☀️' : '🌙';
             localStorage.theme = d ? 'dark' : '';
             draw();
+            drawBri();
         }
 
-        // 状态
+        // 当前 Tab
+        let currentTab = 'cct';
+        function switchTab(tab) {
+            currentTab = tab;
+            const dark = document.documentElement.classList.contains('dark');
+            document.getElementById('panelCCT').classList.toggle('hidden', tab !== 'cct');
+            document.getElementById('panelBrightness').classList.toggle('hidden', tab !== 'brightness');
+            // Tab 按钮样式
+            const activeClass = dark ? 'bg-blue-600 border-blue-600 text-white' : 'bg-blue-600 border-blue-600 text-white';
+            const inactiveClass = dark ? 'bg-neutral-800 border-neutral-700 text-neutral-400 hover:bg-neutral-700' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50';
+            document.getElementById('tabCCT').className = `flex-1 py-2.5 px-4 text-sm font-medium rounded-lg border transition-colors ${tab === 'cct' ? activeClass : inactiveClass}`;
+            document.getElementById('tabBrightness').className = `flex-1 py-2.5 px-4 text-sm font-medium rounded-lg border transition-colors ${tab === 'brightness' ? activeClass : inactiveClass}`;
+            if (tab === 'brightness') {
+                initCanvasBri();
+                drawBri();
+            } else {
+                initCanvas();
+                draw();
+            }
+        }
+
+        // 状态 - 色温
         let keyframes = [], dragging = -1, canvas, ctx;
+        // 状态 - 亮度
+        let keyframesBri = [], draggingBri = -1, canvasBri, ctxBri;
         const getVal = id => parseFloat(document.getElementById(id).value) || 0;
 
         // 日出日落计算
@@ -417,11 +535,264 @@
         window.onload = () => {
             initCanvas();
             resetKeyframes();
+            initCanvasBri();
+            resetKeyframesBri();
+            switchTab('cct');
             ['latitude', 'steepness', 'minTemp', 'maxTemp'].forEach(id =>
                 document.getElementById(id).addEventListener('input', () => { draw(); update(); })
             );
+            ['latitudeBri', 'steepnessBri', 'minBri'].forEach(id =>
+                document.getElementById(id).addEventListener('input', () => { drawBri(); updateBri(); })
+            );
         };
-        window.onresize = () => { initCanvas(); draw(); };
+        window.onresize = () => {
+            initCanvas(); draw();
+            if (!document.getElementById('panelBrightness').classList.contains('hidden')) {
+                initCanvasBri(); drawBri();
+            }
+        };
+
+        // ========== 亮度曲线功能 ==========
+        function initCanvasBri() {
+            canvasBri = document.getElementById('canvasBri');
+            if (!canvasBri) return;
+            ctxBri = canvasBri.getContext('2d');
+            canvasBri.width = canvasBri.offsetWidth * 2;
+            canvasBri.height = canvasBri.offsetHeight * 2;
+            ctxBri.scale(2, 2);
+            canvasBri.onmousedown = e => {
+                const p = getPosBri(e), i = findKFBri(p);
+                if (i >= 0) draggingBri = i;
+                else { keyframesBri.push({ t: p.x / canvasBri.offsetWidth * 24, v: 1 - p.y / canvasBri.offsetHeight }); keyframesBri.sort((a, b) => a.t - b.t); updateBri(); }
+                drawBri();
+            };
+            canvasBri.onmousemove = e => {
+                if (draggingBri < 0) return;
+                const p = getPosBri(e);
+                keyframesBri[draggingBri].t = Math.max(0, Math.min(24, p.x / canvasBri.offsetWidth * 24));
+                keyframesBri[draggingBri].v = Math.max(0, Math.min(1, 1 - p.y / canvasBri.offsetHeight));
+                keyframesBri.sort((a, b) => a.t - b.t);
+                drawBri(); updateBri();
+            };
+            canvasBri.onmouseup = canvasBri.onmouseleave = () => draggingBri = -1;
+            canvasBri.ondblclick = e => {
+                const i = findKFBri(getPosBri(e));
+                if (i >= 0 && keyframesBri.length > 2) { keyframesBri.splice(i, 1); drawBri(); updateBri(); }
+            };
+        }
+
+        function getPosBri(e) { const r = canvasBri.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
+        function findKFBri(p) {
+            const w = canvasBri.offsetWidth, h = canvasBri.offsetHeight;
+            for (let i = 0; i < keyframesBri.length; i++) {
+                const kx = keyframesBri[i].t / 24 * w, ky = (1 - keyframesBri[i].v) * h;
+                if (Math.hypot(kx - p.x, ky - p.y) < 10) return i;
+            }
+            return -1;
+        }
+
+        function getEffectiveKeyframesBri() {
+            const kf = [...keyframesBri];
+            if (kf.length >= 2 && kf[kf.length - 1].t < 24 && kf[0].t === 0) {
+                kf.push({ t: 24, v: kf[0].v });
+            }
+            return kf;
+        }
+
+        function interpolateBri(t) {
+            if (keyframesBri.length < 2) return 0.5;
+            const kf = getEffectiveKeyframesBri();
+            const k = getVal('steepnessBri');
+            if (t <= kf[0].t) return kf[0].v;
+            if (t >= kf[kf.length - 1].t) return kf[kf.length - 1].v;
+            for (let i = 0; i < kf.length - 1; i++) {
+                if (t >= kf[i].t && t <= kf[i + 1].t) {
+                    const mid = (kf[i].t + kf[i + 1].t) / 2;
+                    const width = (kf[i + 1].t - kf[i].t) / 2;
+                    const x = k * (t - mid) / width;
+                    const s = sigmoid(x);
+                    return kf[i].v + (kf[i + 1].v - kf[i].v) * s;
+                }
+            }
+            return kf[kf.length - 1].v;
+        }
+
+        // 亮度 Y 轴固定 0-100
+        function vToYBri(v, h) { return h * (1 - v); }
+
+        function drawBri() {
+            if (!ctxBri) return;
+            const w = canvasBri.offsetWidth, h = canvasBri.offsetHeight, lat = getVal('latitudeBri');
+            const minB = getVal('minBri'), maxB = 100;
+            const dark = document.documentElement.classList.contains('dark');
+            ctxBri.clearRect(0, 0, w, h);
+
+            // 网格
+            ctxBri.strokeStyle = dark ? '#374151' : '#e5e7eb';
+            ctxBri.lineWidth = 1;
+            for (let i = 0; i <= 24; i += 6) {
+                const x = i / 24 * w;
+                ctxBri.beginPath(); ctxBri.moveTo(x, 0); ctxBri.lineTo(x, h); ctxBri.stroke();
+                ctxBri.fillStyle = '#9ca3af'; ctxBri.font = '10px sans-serif';
+                ctxBri.fillText(`${i}:00`, x + 2, h - 4);
+            }
+
+            // Y轴网格线（按20%间隔）
+            ctxBri.setLineDash([]);
+            for (let pct = 0; pct <= 100; pct += 20) {
+                const y = vToYBri(pct / 100, h);
+                ctxBri.beginPath(); ctxBri.moveTo(0, y); ctxBri.lineTo(w, y); ctxBri.stroke();
+                ctxBri.fillStyle = '#9ca3af'; ctxBri.font = '10px sans-serif';
+                ctxBri.fillText(`${pct}%`, 4, y - 4);
+            }
+
+            // 最低亮度参考线
+            ctxBri.strokeStyle = dark ? '#9ca3af' : '#6b7280';
+            ctxBri.setLineDash([4, 4]);
+            const yMinBri = vToYBri((minB - 0) / (100 - 0), h);
+            ctxBri.beginPath(); ctxBri.moveTo(0, yMinBri); ctxBri.lineTo(w, yMinBri); ctxBri.stroke();
+            ctxBri.fillStyle = dark ? '#d1d5db' : '#4b5563';
+            ctxBri.fillText(`← ${minB}% (最低)`, w - 80, yMinBri + 12);
+            ctxBri.setLineDash([]);
+
+            // 日出日落线
+            if (lat) {
+                const sun = calcSun(lat);
+                document.getElementById('sunriseBri').textContent = fmt(sun.rise);
+                document.getElementById('sunsetBri').textContent = fmt(sun.set);
+                ctxBri.strokeStyle = '#f59e0b'; ctxBri.setLineDash([4, 4]);
+                [sun.rise, sun.set].forEach(t => {
+                    const x = t / 24 * w;
+                    ctxBri.beginPath(); ctxBri.moveTo(x, 0); ctxBri.lineTo(x, h); ctxBri.stroke();
+                });
+                ctxBri.setLineDash([]);
+            } else {
+                document.getElementById('sunriseBri').textContent = '--:--';
+                document.getElementById('sunsetBri').textContent = '--:--';
+            }
+
+            // 曲线
+            ctxBri.strokeStyle = '#10b981'; ctxBri.lineWidth = 2;
+            ctxBri.beginPath();
+            for (let t = 0; t <= 24; t += 0.05) {
+                const x = t / 24 * w, y = vToYBri(interpolateBri(t), h);
+                t === 0 ? ctxBri.moveTo(x, y) : ctxBri.lineTo(x, y);
+            }
+            ctxBri.stroke();
+
+            // 关键帧点
+            keyframesBri.forEach((kf, i) => {
+                ctxBri.beginPath();
+                ctxBri.arc(kf.t / 24 * w, vToYBri(kf.v, h), 7, 0, Math.PI * 2);
+                ctxBri.fillStyle = i === draggingBri ? '#ef4444' : '#10b981';
+                ctxBri.fill();
+                ctxBri.strokeStyle = '#fff'; ctxBri.lineWidth = 2; ctxBri.stroke();
+            });
+        }
+
+        function updateBri() {
+            const minB = getVal('minBri'), maxB = 100;
+            const list = document.getElementById('keyframeListBri');
+            list.innerHTML = keyframesBri.map((kf, i) => {
+                const bri = Math.round(minB + kf.v * (maxB - minB));
+                const hr = Math.floor(kf.t), m = Math.floor((kf.t % 1) * 60);
+                return `<div class="flex items-center gap-2 text-xs py-1.5 px-2 bg-gray-50 dark:bg-neutral-900 rounded">
+                    <input type="number" value="${hr}" min="0" max="23" onchange="updateKFBri(${i},'h',this.value)" class="w-12 px-1 py-0.5 border border-gray-200 dark:border-neutral-700 rounded text-center dark:bg-neutral-800 dark:text-white">
+                    <span class="text-gray-400">:</span>
+                    <input type="number" value="${m}" min="0" max="59" step="5" onchange="updateKFBri(${i},'m',this.value)" class="w-12 px-1 py-0.5 border border-gray-200 dark:border-neutral-700 rounded text-center dark:bg-neutral-800 dark:text-white">
+                    <span class="text-gray-400 mx-1">→</span>
+                    <input type="number" value="${bri}" min="${minB}" max="${maxB}" step="5" onchange="updateKFBri(${i},'b',this.value)" class="w-16 px-1 py-0.5 border border-gray-200 dark:border-neutral-700 rounded text-center dark:bg-neutral-800 dark:text-white">
+                    <span class="text-gray-500">%</span>
+                    ${keyframesBri.length > 2 ? `<button onclick="deleteKFBri(${i})" class="ml-auto text-red-500 hover:text-red-700">×</button>` : ''}
+                </div>`;
+            }).join('');
+            generateFormulaBri();
+        }
+
+        function updateKFBri(i, type, val) {
+            const minB = getVal('minBri'), maxB = 100;
+            if (type === 'h') {
+                const m = (keyframesBri[i].t % 1) * 60;
+                keyframesBri[i].t = Math.max(0, Math.min(24, parseInt(val) + m / 60));
+            } else if (type === 'm') {
+                const hr = Math.floor(keyframesBri[i].t);
+                keyframesBri[i].t = Math.max(0, Math.min(24, hr + parseInt(val) / 60));
+            } else if (type === 'b') {
+                keyframesBri[i].v = (parseInt(val) - minB) / (maxB - minB);
+            }
+            keyframesBri.sort((a, b) => a.t - b.t);
+            drawBri(); updateBri();
+        }
+
+        function deleteKFBri(i) {
+            if (keyframesBri.length > 2) { keyframesBri.splice(i, 1); drawBri(); updateBri(); }
+        }
+
+        function addKeyframeBri() {
+            keyframesBri.push({ t: 12, v: 0.5 });
+            keyframesBri.sort((a, b) => a.t - b.t);
+            drawBri(); updateBri();
+        }
+
+        function resetKeyframesBri() {
+            const lat = getVal('latitudeBri');
+            if (lat) {
+                const sun = calcSun(lat);
+                keyframesBri = [
+                    { t: 0, v: 0 },
+                    { t: sun.rise, v: 0 },
+                    { t: sun.rise + 1, v: 1 },
+                    { t: sun.set - 1, v: 1 },
+                    { t: sun.set, v: 0 },
+                    { t: 24, v: 0 }
+                ];
+            } else {
+                keyframesBri = [{ t: 0, v: 0 }, { t: 12, v: 1 }];
+            }
+            drawBri(); updateBri();
+        }
+
+        function generateFormulaBri() {
+            const lat = getVal('latitudeBri'), k = getVal('steepnessBri');
+            const minB = getVal('minBri'), maxB = 100;
+            if (!lat || keyframesBri.length < 2) {
+                document.getElementById('formulaBri').textContent = '请输入纬度并确保至少有2个关键帧';
+                document.getElementById('formulaLenBri').textContent = '';
+                return;
+            }
+
+            const kf = getEffectiveKeyframesBri();
+            const time = '(hours()*3600+minutes()*60+seconds())';
+            const parts = [];
+            for (let i = 0; i < kf.length - 1; i++) {
+                const t1 = Math.round(kf[i].t * 3600);
+                const t2 = Math.round(kf[i + 1].t * 3600);
+                const v1 = Math.round(minB + kf[i].v * (maxB - minB));
+                const v2 = Math.round(minB + kf[i + 1].v * (maxB - minB));
+                const mid = Math.round((t1 + t2) / 2);
+                const width = Math.round((t2 - t1) / 2);
+                const range = v2 - v1;
+                const sig = `(${v1}+${range}*(1/(1+pow(e(),-${k}*(${time}-${mid})/${width}))))`;
+                const cond = `((${time}>=${t1})*(${time}<${t2}))`;
+                parts.push(`${sig}*${cond}`);
+            }
+
+            const firstV = Math.round(minB + kf[0].v * (maxB - minB));
+            const lastV = Math.round(minB + kf[kf.length - 1].v * (maxB - minB));
+            const firstT = Math.round(kf[0].t * 3600);
+            const lastT = Math.round(kf[kf.length - 1].t * 3600);
+            parts.unshift(`${firstV}*(${time}<${firstT})`);
+            parts.push(`${lastV}*(${time}>=${lastT})`);
+
+            const formula = `floor(${parts.join('+')})`;
+            document.getElementById('formulaBri').textContent = formula;
+            document.getElementById('formulaLenBri').textContent = `公式长度: ${formula.length} 字符`;
+        }
+
+        function copyFormulaBri() {
+            const f = document.getElementById('formulaBri').textContent;
+            if (f && !f.includes('请')) navigator.clipboard.writeText(f).then(() => alert('已复制'));
+        }
     </script>
 </body>
 
