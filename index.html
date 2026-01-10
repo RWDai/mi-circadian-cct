@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>小米智能家居极客版色温曲线生成器</title>
+    <link href="https://cdn.jsdelivr.net/npm/preline@2.0.3/dist/preline.min.css" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>tailwind.config = { darkMode: 'class' }</script>
+</head>
+
+<body class="bg-gray-50 dark:bg-neutral-900 min-h-screen">
+    <div class="max-w-2xl mx-auto px-4 py-8">
+        <header class="flex justify-between items-center mb-6">
+            <h1 class="text-xl font-semibold text-gray-800 dark:text-white">色温曲线生成器</h1>
+            <button onclick="toggleTheme()"
+                class="p-2 rounded-lg bg-white dark:bg-neutral-800 border border-gray-200 dark:border-neutral-700 hover:bg-gray-100 dark:hover:bg-neutral-700">
+                <span id="themeIcon">🌙</span>
+            </button>
+        </header>
+
+        <!-- 参数设置 -->
+        <div
+            class="bg-white dark:bg-neutral-800 border border-gray-200 dark:border-neutral-700 rounded-xl p-5 mb-4 shadow-sm">
+            <div class="grid grid-cols-2 gap-4 mb-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-neutral-300 mb-1.5">
+                        纬度 <a href="https://cnbj1.fds.api.xiaomi.com/mijia-tob/prod/ai-config/pos-v2/index.html"
+                            target="_blank" class="text-blue-600 hover:underline text-xs">(查询)</a>
+                    </label>
+                    <input type="number" id="latitude" step="0.001" placeholder="如: 39.904"
+                        class="py-2.5 px-3 block w-full border border-gray-200 dark:border-neutral-700 rounded-lg text-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-neutral-900 dark:text-neutral-400">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-neutral-300 mb-1.5">过渡陡度 (k)</label>
+                    <input type="number" id="steepness" value="5" step="0.5" min="1" max="20"
+                        class="py-2.5 px-3 block w-full border border-gray-200 dark:border-neutral-700 rounded-lg text-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-neutral-900 dark:text-neutral-400">
+                </div>
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-neutral-300 mb-1.5">最低色温 (K)</label>
+                    <input type="number" id="minTemp" value="2700"
+                        class="py-2.5 px-3 block w-full border border-gray-200 dark:border-neutral-700 rounded-lg text-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-neutral-900 dark:text-neutral-400">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-neutral-300 mb-1.5">最高色温 (K)</label>
+                    <input type="number" id="maxTemp" value="6500"
+                        class="py-2.5 px-3 block w-full border border-gray-200 dark:border-neutral-700 rounded-lg text-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-neutral-900 dark:text-neutral-400">
+                </div>
+            </div>
+        </div>
+
+        <!-- 曲线预览 -->
+        <div
+            class="bg-white dark:bg-neutral-800 border border-gray-200 dark:border-neutral-700 rounded-xl p-5 mb-4 shadow-sm">
+            <div class="flex justify-between items-center mb-3">
+                <h3 class="text-sm font-medium text-gray-800 dark:text-white">曲线编辑器</h3>
+                <div class="flex gap-4 text-xs text-gray-500 dark:text-neutral-400">
+                    <span>日出: <b id="sunrise" class="text-gray-800 dark:text-white">--:--</b></span>
+                    <span>日落: <b id="sunset" class="text-gray-800 dark:text-white">--:--</b></span>
+                </div>
+            </div>
+            <p class="text-xs text-gray-400 dark:text-neutral-500 mb-2">点击添加关键帧 | 拖动调整 | 双击删除</p>
+            <div class="bg-gray-50 dark:bg-neutral-900 rounded-lg p-2">
+                <canvas id="canvas" class="w-full rounded cursor-crosshair" style="height:180px"></canvas>
+            </div>
+        </div>
+
+        <!-- 关键帧列表 -->
+        <div
+            class="bg-white dark:bg-neutral-800 border border-gray-200 dark:border-neutral-700 rounded-xl p-5 mb-4 shadow-sm">
+            <div class="flex justify-between items-center mb-3">
+                <h3 class="text-sm font-medium text-gray-800 dark:text-white">关键帧 <span
+                        class="text-xs text-gray-400 font-normal">(可直接编辑)</span></h3>
+                <div class="flex gap-3">
+                    <button onclick="addKeyframe()" class="text-xs text-blue-600 hover:underline">+ 添加</button>
+                    <button onclick="resetKeyframes()" class="text-xs text-gray-500 hover:underline">重置</button>
+                </div>
+            </div>
+            <div id="keyframeList" class="space-y-2 max-h-48 overflow-y-auto"></div>
+        </div>
+
+        <!-- 公式输出 -->
+        <div
+            class="bg-white dark:bg-neutral-800 border border-gray-200 dark:border-neutral-700 rounded-xl p-5 shadow-sm">
+            <div class="flex justify-between items-center mb-3">
+                <h3 class="text-sm font-medium text-gray-800 dark:text-white">米家极客版公式</h3>
+                <button onclick="copyFormula()"
+                    class="py-1.5 px-3 text-xs font-medium rounded-lg border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-gray-800 dark:text-white hover:bg-gray-50 dark:hover:bg-neutral-700">复制</button>
+            </div>
+            <div id="formula"
+                class="p-3 bg-gray-50 dark:bg-neutral-900 rounded-lg font-mono text-xs text-gray-600 dark:text-neutral-400 whitespace-pre-wrap break-all max-h-36 overflow-y-auto select-all">
+            </div>
+            <p id="formulaLen" class="text-xs text-gray-400 mt-2"></p>
+        </div>
+
+        <footer class="text-center mt-6 text-xs text-gray-400 dark:text-neutral-500">
+            所有计算在本地完成 · <a href="https://github.com" class="text-blue-600 hover:underline">GitHub</a>
+        </footer>
+    </div>
+
+    <script>
+        // 主题
+        if (localStorage.theme === 'dark') document.documentElement.classList.add('dark'), document.getElementById('themeIcon').textContent = '☀️';
+        function toggleTheme() {
+            const d = document.documentElement.classList.toggle('dark');
+            document.getElementById('themeIcon').textContent = d ? '☀️' : '🌙';
+            localStorage.theme = d ? 'dark' : '';
+            draw();
+        }
+
+        // 状态
+        let keyframes = [], dragging = -1, canvas, ctx;
+        const getVal = id => parseFloat(document.getElementById(id).value) || 0;
+
+        // 日出日落计算
+        function calcSun(lat) {
+            const day = Math.floor((new Date() - new Date(new Date().getFullYear(), 0, 0)) / 864e5);
+            const r = lat * Math.PI / 180;
+            const d = 23.44 * Math.sin(2 * Math.PI * (day - 81) / 365) * Math.PI / 180;
+            const h = Math.acos(Math.max(-1, Math.min(1, -Math.tan(r) * Math.tan(d)))) * 180 / Math.PI / 15;
+            return { rise: 12 - h, set: 12 + h };
+        }
+
+        function fmt(h) { return `${Math.floor(h).toString().padStart(2, '0')}:${Math.floor((h % 1) * 60).toString().padStart(2, '0')}`; }
+
+        // Canvas
+        function initCanvas() {
+            canvas = document.getElementById('canvas');
+            ctx = canvas.getContext('2d');
+            canvas.width = canvas.offsetWidth * 2;
+            canvas.height = canvas.offsetHeight * 2;
+            ctx.scale(2, 2);
+            canvas.onmousedown = e => {
+                const p = getPos(e), i = findKF(p);
+                if (i >= 0) dragging = i;
+                else { keyframes.push({ t: p.x / canvas.offsetWidth * 24, v: 1 - p.y / canvas.offsetHeight }); keyframes.sort((a, b) => a.t - b.t); update(); }
+                draw();
+            };
+            canvas.onmousemove = e => {
+                if (dragging < 0) return;
+                const p = getPos(e), minT = getVal('minTemp'), maxT = getVal('maxTemp');
+                keyframes[dragging].t = Math.max(0, Math.min(24, p.x / canvas.offsetWidth * 24));
+                keyframes[dragging].v = Math.max(0, Math.min(1, 1 - p.y / canvas.offsetHeight));
+                keyframes.sort((a, b) => a.t - b.t);
+                dragging = keyframes.findIndex(k => k === keyframes.find(x => x.t === keyframes[dragging]?.t));
+                draw(); update();
+            };
+            canvas.onmouseup = canvas.onmouseleave = () => dragging = -1;
+            canvas.ondblclick = e => {
+                const i = findKF(getPos(e));
+                if (i >= 0 && keyframes.length > 2) { keyframes.splice(i, 1); draw(); update(); }
+            };
+        }
+
+        function getPos(e) { const r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
+        function findKF(p) {
+            const w = canvas.offsetWidth, h = canvas.offsetHeight;
+            for (let i = 0; i < keyframes.length; i++) {
+                const kx = keyframes[i].t / 24 * w, ky = (1 - keyframes[i].v) * h;
+                if (Math.hypot(kx - p.x, ky - p.y) < 10) return i;
+            }
+            return -1;
+        }
+
+        // Sigmoid 插值 (支持24小时循环)
+        function sigmoid(x) { return 1 / (1 + Math.exp(-x)); }
+        function getEffectiveKeyframes() {
+            // 如果最后一个关键帧不是24点，自动添加虚拟24点（值等于0点）形成循环
+            const kf = [...keyframes];
+            if (kf.length >= 2 && kf[kf.length - 1].t < 24 && kf[0].t === 0) {
+                kf.push({ t: 24, v: kf[0].v });
+            }
+            return kf;
+        }
+        function interpolate(t) {
+            if (keyframes.length < 2) return 0.5;
+            const kf = getEffectiveKeyframes();
+            const k = getVal('steepness');
+            if (t <= kf[0].t) return kf[0].v;
+            if (t >= kf[kf.length - 1].t) return kf[kf.length - 1].v;
+            for (let i = 0; i < kf.length - 1; i++) {
+                if (t >= kf[i].t && t <= kf[i + 1].t) {
+                    const mid = (kf[i].t + kf[i + 1].t) / 2;
+                    const width = (kf[i + 1].t - kf[i].t) / 2;
+                    const x = k * (t - mid) / width;
+                    const s = sigmoid(x);
+                    return kf[i].v + (kf[i + 1].v - kf[i].v) * s;
+                }
+            }
+            return kf[kf.length - 1].v;
+        }
+
+        // Y轴留白比例
+        const yPadding = 0.1;
+        const yAxisExpand = 0.25; // Y轴范围扩展比例
+        function vToY(v, h) { return h * (yPadding + (1 - v) * (1 - 2 * yPadding)); }
+        function yToV(y, h) { return 1 - (y / h - yPadding) / (1 - 2 * yPadding); }
+        function getYAxisRange(minT, maxT) {
+            // Y轴范围比实际色温范围稍大
+            const range = maxT - minT;
+            const expand = range * yAxisExpand;
+            return { min: Math.round(minT - expand), max: Math.round(maxT + expand) };
+        }
+
+        // 绘制
+        function draw() {
+            if (!ctx) return;
+            const w = canvas.offsetWidth, h = canvas.offsetHeight, lat = getVal('latitude');
+            const minT = getVal('minTemp'), maxT = getVal('maxTemp');
+            const dark = document.documentElement.classList.contains('dark');
+            ctx.clearRect(0, 0, w, h);
+
+            // 网格
+            ctx.strokeStyle = dark ? '#374151' : '#e5e7eb';
+            ctx.lineWidth = 1;
+            for (let i = 0; i <= 24; i += 6) {
+                const x = i / 24 * w;
+                ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+                ctx.fillStyle = '#9ca3af'; ctx.font = '10px sans-serif';
+                ctx.fillText(`${i}:00`, x + 2, h - 4);
+            }
+            const yRange = getYAxisRange(minT, maxT);
+
+            // Y轴网格线（按1000K间隔）
+            ctx.strokeStyle = dark ? '#374151' : '#e5e7eb';
+            ctx.setLineDash([]);
+            ctx.lineWidth = 1;
+            // 计算Y轴刻度范围（按1000取整）
+            const yStart = Math.ceil(yRange.min / 1000) * 1000;
+            const yEnd = Math.floor(yRange.max / 1000) * 1000;
+            for (let temp = yStart; temp <= yEnd; temp += 1000) {
+                // 将温度值转换为v值（0-1范围可能超出）
+                const v = (temp - minT) / (maxT - minT);
+                const y = vToY(v, h);
+                // 只绘制在画布范围内的线
+                if (y >= 0 && y <= h) {
+                    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+                    ctx.fillStyle = '#9ca3af'; ctx.font = '10px sans-serif';
+                    ctx.fillText(`${temp}K`, 4, y - 4);
+                }
+            }
+
+            // Y轴上下边界线
+            ctx.strokeStyle = dark ? '#4b5563' : '#d1d5db';
+            ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(w, 0); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(0, h); ctx.lineTo(w, h); ctx.stroke();
+
+            // 最低/最高色温参考线（虚线，突出显示）
+            ctx.strokeStyle = dark ? '#9ca3af' : '#6b7280';
+            ctx.setLineDash([4, 4]);
+            ctx.lineWidth = 1;
+            // 最高色温线 (v=1)
+            const yMax = vToY(1, h);
+            ctx.beginPath(); ctx.moveTo(0, yMax); ctx.lineTo(w, yMax); ctx.stroke();
+            ctx.fillStyle = dark ? '#d1d5db' : '#4b5563';
+            ctx.fillText(`← ${maxT}K (最高)`, w - 80, yMax + 12);
+            // 最低色温线 (v=0)
+            const yMin = vToY(0, h);
+            ctx.beginPath(); ctx.moveTo(0, yMin); ctx.lineTo(w, yMin); ctx.stroke();
+            ctx.fillText(`← ${minT}K (最低)`, w - 80, yMin - 4);
+            ctx.setLineDash([]);
+
+            // 日出日落线
+            if (lat) {
+                const sun = calcSun(lat);
+                document.getElementById('sunrise').textContent = fmt(sun.rise);
+                document.getElementById('sunset').textContent = fmt(sun.set);
+                ctx.strokeStyle = '#f59e0b'; ctx.setLineDash([4, 4]);
+                [sun.rise, sun.set].forEach(t => {
+                    const x = t / 24 * w;
+                    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+                });
+                ctx.setLineDash([]);
+            } else {
+                document.getElementById('sunrise').textContent = '--:--';
+                document.getElementById('sunset').textContent = '--:--';
+            }
+
+            // 曲线
+            ctx.strokeStyle = '#3b82f6'; ctx.lineWidth = 2;
+            ctx.beginPath();
+            for (let t = 0; t <= 24; t += 0.05) {
+                const x = t / 24 * w, y = vToY(interpolate(t), h);
+                t === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+
+            // 关键帧点
+            keyframes.forEach((kf, i) => {
+                ctx.beginPath();
+                ctx.arc(kf.t / 24 * w, vToY(kf.v, h), 7, 0, Math.PI * 2);
+                ctx.fillStyle = i === dragging ? '#ef4444' : '#3b82f6';
+                ctx.fill();
+                ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
+            });
+        }
+
+        // 更新关键帧列表和公式
+        function update() {
+            const minT = getVal('minTemp'), maxT = getVal('maxTemp');
+            const list = document.getElementById('keyframeList');
+            list.innerHTML = keyframes.map((kf, i) => {
+                const temp = Math.round(minT + kf.v * (maxT - minT));
+                const h = Math.floor(kf.t), m = Math.floor((kf.t % 1) * 60);
+                return `<div class="flex items-center gap-2 text-xs py-1.5 px-2 bg-gray-50 dark:bg-neutral-900 rounded">
+                    <input type="number" value="${h}" min="0" max="23" onchange="updateKF(${i},'h',this.value)" class="w-12 px-1 py-0.5 border border-gray-200 dark:border-neutral-700 rounded text-center dark:bg-neutral-800 dark:text-white">
+                    <span class="text-gray-400">:</span>
+                    <input type="number" value="${m}" min="0" max="59" step="5" onchange="updateKF(${i},'m',this.value)" class="w-12 px-1 py-0.5 border border-gray-200 dark:border-neutral-700 rounded text-center dark:bg-neutral-800 dark:text-white">
+                    <span class="text-gray-400 mx-1">→</span>
+                    <input type="number" value="${temp}" min="${minT}" max="${maxT}" step="100" onchange="updateKF(${i},'t',this.value)" class="w-16 px-1 py-0.5 border border-gray-200 dark:border-neutral-700 rounded text-center dark:bg-neutral-800 dark:text-white">
+                    <span class="text-gray-500">K</span>
+                    ${keyframes.length > 2 ? `<button onclick="deleteKF(${i})" class="ml-auto text-red-500 hover:text-red-700">×</button>` : ''}
+                </div>`;
+            }).join('');
+            generateFormula();
+        }
+
+        function updateKF(i, type, val) {
+            const minT = getVal('minTemp'), maxT = getVal('maxTemp');
+            if (type === 'h') {
+                const m = (keyframes[i].t % 1) * 60;
+                keyframes[i].t = Math.max(0, Math.min(24, parseInt(val) + m / 60));
+            } else if (type === 'm') {
+                const h = Math.floor(keyframes[i].t);
+                keyframes[i].t = Math.max(0, Math.min(24, h + parseInt(val) / 60));
+            } else if (type === 't') {
+                keyframes[i].v = (parseInt(val) - minT) / (maxT - minT);
+            }
+            keyframes.sort((a, b) => a.t - b.t);
+            draw(); update();
+        }
+
+        function deleteKF(i) {
+            if (keyframes.length > 2) { keyframes.splice(i, 1); draw(); update(); }
+        }
+
+        function addKeyframe() {
+            const minT = getVal('minTemp'), maxT = getVal('maxTemp');
+            keyframes.push({ t: 12, v: 0.5 });
+            keyframes.sort((a, b) => a.t - b.t);
+            draw(); update();
+        }
+
+        // 生成公式
+        function generateFormula() {
+            const lat = getVal('latitude'), k = getVal('steepness');
+            const minT = getVal('minTemp'), maxT = getVal('maxTemp');
+            if (!lat || keyframes.length < 2) {
+                document.getElementById('formula').textContent = '请输入纬度并确保至少有2个关键帧';
+                document.getElementById('formulaLen').textContent = '';
+                return;
+            }
+
+            const kf = getEffectiveKeyframes(); // 使用有效关键帧（包含24点循环）
+            const time = '(hours()*3600+minutes()*60+seconds())';
+            let formula = '';
+
+            // 分段 sigmoid 公式
+            const parts = [];
+            for (let i = 0; i < kf.length - 1; i++) {
+                const t1 = Math.round(kf[i].t * 3600);
+                const t2 = Math.round(kf[i + 1].t * 3600);
+                const v1 = Math.round(minT + kf[i].v * (maxT - minT));
+                const v2 = Math.round(minT + kf[i + 1].v * (maxT - minT));
+                const mid = Math.round((t1 + t2) / 2);
+                const width = Math.round((t2 - t1) / 2);
+                const range = v2 - v1;
+
+                // sigmoid: v1 + range * (1/(1+e^(-k*(t-mid)/width)))
+                const sig = `(${v1}+${range}*(1/(1+pow(e(),-${k}*(${time}-${mid})/${width}))))`;
+                // 条件: t >= t1 && t < t2
+                const cond = `((${time}>=${t1})*(${time}<${t2}))`;
+                parts.push(`${sig}*${cond}`);
+            }
+
+            // 边界处理
+            const firstV = Math.round(minT + kf[0].v * (maxT - minT));
+            const lastV = Math.round(minT + kf[kf.length - 1].v * (maxT - minT));
+            const firstT = Math.round(kf[0].t * 3600);
+            const lastT = Math.round(kf[kf.length - 1].t * 3600);
+            parts.unshift(`${firstV}*(${time}<${firstT})`);
+            parts.push(`${lastV}*(${time}>=${lastT})`);
+
+            formula = `floor(${parts.join('+')})`;
+            document.getElementById('formula').textContent = formula;
+            document.getElementById('formulaLen').textContent = `公式长度: ${formula.length} 字符`;
+        }
+
+        function copyFormula() {
+            const f = document.getElementById('formula').textContent;
+            if (f && !f.includes('请')) navigator.clipboard.writeText(f).then(() => alert('已复制'));
+        }
+
+        function resetKeyframes() {
+            const lat = getVal('latitude');
+            if (lat) {
+                const sun = calcSun(lat);
+                keyframes = [
+                    { t: 0, v: 0 },
+                    { t: sun.rise, v: 0 },
+                    { t: sun.rise + 1, v: 1 },
+                    { t: sun.set - 1, v: 1 },
+                    { t: sun.set, v: 0 },
+                    { t: 24, v: 0 }
+                ];
+            } else {
+                keyframes = [{ t: 0, v: 0 }, { t: 12, v: 1 }];
+            }
+            draw(); update();
+        }
+
+        // 初始化
+        window.onload = () => {
+            initCanvas();
+            resetKeyframes();
+            ['latitude', 'steepness', 'minTemp', 'maxTemp'].forEach(id =>
+                document.getElementById(id).addEventListener('input', () => { draw(); update(); })
+            );
+        };
+        window.onresize = () => { initCanvas(); draw(); };
+    </script>
+</body>
+
+</html>
