@@ -8,6 +8,9 @@
     <link href="https://cdn.jsdelivr.net/npm/preline@2.0.3/dist/preline.min.css" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <script>tailwind.config = { darkMode: 'class' }</script>
+    <!-- KaTeX for LaTeX rendering -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
 </head>
 
 <body class="bg-gray-50 dark:bg-neutral-900 min-h-screen">
@@ -47,19 +50,22 @@
                             class="py-2.5 px-3 block w-full border border-gray-200 dark:border-neutral-700 rounded-lg text-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-neutral-900 dark:text-neutral-400">
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 dark:text-neutral-300 mb-1.5">过渡陡度 (k)</label>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-neutral-300 mb-1.5">过渡陡度
+                            (k)</label>
                         <input type="number" id="steepness" value="5" step="0.5" min="1" max="20"
                             class="py-2.5 px-3 block w-full border border-gray-200 dark:border-neutral-700 rounded-lg text-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-neutral-900 dark:text-neutral-400">
                     </div>
                 </div>
                 <div class="grid grid-cols-2 gap-4">
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 dark:text-neutral-300 mb-1.5">最低色温 (K)</label>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-neutral-300 mb-1.5">最低色温
+                            (K)</label>
                         <input type="number" id="minTemp" value="2700"
                             class="py-2.5 px-3 block w-full border border-gray-200 dark:border-neutral-700 rounded-lg text-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-neutral-900 dark:text-neutral-400">
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 dark:text-neutral-300 mb-1.5">最高色温 (K)</label>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-neutral-300 mb-1.5">最高色温
+                            (K)</label>
                         <input type="number" id="maxTemp" value="6500"
                             class="py-2.5 px-3 block w-full border border-gray-200 dark:border-neutral-700 rounded-lg text-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-neutral-900 dark:text-neutral-400">
                     </div>
@@ -108,6 +114,10 @@
                     class="p-3 bg-gray-50 dark:bg-neutral-900 rounded-lg font-mono text-xs text-gray-600 dark:text-neutral-400 whitespace-pre-wrap break-all max-h-36 overflow-y-auto select-all">
                 </div>
                 <p id="formulaLen" class="text-xs text-gray-400 mt-2"></p>
+                <div class="mt-3 p-3 bg-gray-100 dark:bg-neutral-700 rounded-lg overflow-x-auto">
+                    <p class="text-xs text-gray-500 dark:text-neutral-400 mb-2">数学表达式 (LaTeX):</p>
+                    <div id="formulaMath" class="text-sm"></div>
+                </div>
             </div>
         </div>
 
@@ -126,19 +136,22 @@
                             class="py-2.5 px-3 block w-full border border-gray-200 dark:border-neutral-700 rounded-lg text-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-neutral-900 dark:text-neutral-400">
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 dark:text-neutral-300 mb-1.5">过渡陡度 (k)</label>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-neutral-300 mb-1.5">过渡陡度
+                            (k)</label>
                         <input type="number" id="steepnessBri" value="5" step="0.5" min="1" max="20"
                             class="py-2.5 px-3 block w-full border border-gray-200 dark:border-neutral-700 rounded-lg text-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-neutral-900 dark:text-neutral-400">
                     </div>
                 </div>
                 <div class="grid grid-cols-2 gap-4">
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 dark:text-neutral-300 mb-1.5">最低亮度 (%)</label>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-neutral-300 mb-1.5">最低亮度
+                            (%)</label>
                         <input type="number" id="minBri" value="1" min="0" max="99"
                             class="py-2.5 px-3 block w-full border border-gray-200 dark:border-neutral-700 rounded-lg text-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-neutral-900 dark:text-neutral-400">
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 dark:text-neutral-300 mb-1.5">最高亮度 (%)</label>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-neutral-300 mb-1.5">最高亮度
+                            (%)</label>
                         <input type="number" id="maxBri" value="100" disabled
                             class="py-2.5 px-3 block w-full border border-gray-200 dark:border-neutral-700 rounded-lg text-sm bg-gray-100 dark:bg-neutral-700 dark:text-neutral-500 cursor-not-allowed">
                     </div>
@@ -150,9 +163,11 @@
                 class="bg-white dark:bg-neutral-800 border border-gray-200 dark:border-neutral-700 rounded-xl p-5 mb-4 shadow-sm">
                 <div class="flex justify-between items-center mb-3">
                     <h3 class="text-sm font-medium text-gray-800 dark:text-white">曲线编辑器</h3>
-                    <div class="flex gap-4 text-xs text-gray-500 dark:text-neutral-400">
-                        <span>日出: <b id="sunriseBri" class="text-gray-800 dark:text-white">--:--</b></span>
-                        <span>日落: <b id="sunsetBri" class="text-gray-800 dark:text-white">--:--</b></span>
+                    <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 dark:text-neutral-400">
+                        <span title="民用曙光开始（太阳-6°）">曙光: <b id="civilDawnBri" class="text-amber-600">--:--</b></span>
+                        <span title="日出（太阳上边缘触及地平线）">日出: <b id="sunriseBri" class="text-orange-500">--:--</b></span>
+                        <span title="日落（太阳下边缘触及地平线）">日落: <b id="sunsetBri" class="text-orange-500">--:--</b></span>
+                        <span title="民用暮光结束（太阳-6°）">暮光: <b id="civilDuskBri" class="text-amber-600">--:--</b></span>
                     </div>
                 </div>
                 <p class="text-xs text-gray-400 dark:text-neutral-500 mb-2">点击添加关键帧 | 拖动调整 | 双击删除</p>
@@ -187,11 +202,16 @@
                     class="p-3 bg-gray-50 dark:bg-neutral-900 rounded-lg font-mono text-xs text-gray-600 dark:text-neutral-400 whitespace-pre-wrap break-all max-h-36 overflow-y-auto select-all">
                 </div>
                 <p id="formulaLenBri" class="text-xs text-gray-400 mt-2"></p>
+                <div class="mt-3 p-3 bg-gray-100 dark:bg-neutral-700 rounded-lg overflow-x-auto">
+                    <p class="text-xs text-gray-500 dark:text-neutral-400 mb-2">数学表达式 (LaTeX):</p>
+                    <div id="formulaMathBri" class="text-sm"></div>
+                </div>
             </div>
         </div>
 
         <footer class="text-center mt-6 text-xs text-gray-400 dark:text-neutral-500">
-            所有计算在本地完成 · <a href="https://github.com" class="text-blue-600 hover:underline">GitHub</a>
+            所有计算在本地完成 · <a href="https://github.com/RWDai/mi-circadian-cct"
+                class="text-blue-600 hover:underline">GitHub</a>
         </footer>
     </div>
 
@@ -233,13 +253,26 @@
         let keyframesBri = [], draggingBri = -1, canvasBri, ctxBri;
         const getVal = id => parseFloat(document.getElementById(id).value) || 0;
 
-        // 日出日落计算
-        function calcSun(lat) {
+        // 日出日落计算（支持不同太阳高度角）
+        function calcSun(lat, angle = -0.833) {
             const day = Math.floor((new Date() - new Date(new Date().getFullYear(), 0, 0)) / 864e5);
             const r = lat * Math.PI / 180;
             const d = 23.44 * Math.sin(2 * Math.PI * (day - 81) / 365) * Math.PI / 180;
-            const h = Math.acos(Math.max(-1, Math.min(1, -Math.tan(r) * Math.tan(d)))) * 180 / Math.PI / 15;
+            const a = angle * Math.PI / 180;
+            const cosH = (Math.sin(a) - Math.sin(r) * Math.sin(d)) / (Math.cos(r) * Math.cos(d));
+            if (cosH < -1 || cosH > 1) return null; // 极昼或极夜
+            const h = Math.acos(cosH) * 180 / Math.PI / 15;
             return { rise: 12 - h, set: 12 + h };
+        }
+
+        // 获取完整的太阳时间（日出日落 + 曙暮光）
+        function getSunTimes(lat) {
+            return {
+                sun: calcSun(lat, -0.833),      // 日出日落（考虑大气折射）
+                civil: calcSun(lat, -6),        // 民用曙暮光
+                nautical: calcSun(lat, -12),    // 航海曙暮光
+                astro: calcSun(lat, -18)        // 天文曙暮光
+            };
         }
 
         function fmt(h) { return `${Math.floor(h).toString().padStart(2, '0')}:${Math.floor((h % 1) * 60).toString().padStart(2, '0')}`; }
@@ -466,45 +499,68 @@
             draw(); update();
         }
 
-        // 生成公式
+        // 生成公式（使用 sigmoid 叠加，无比较符号）
         function generateFormula() {
             const lat = getVal('latitude'), k = getVal('steepness');
             const minT = getVal('minTemp'), maxT = getVal('maxTemp');
             if (!lat || keyframes.length < 2) {
                 document.getElementById('formula').textContent = '请输入纬度并确保至少有2个关键帧';
                 document.getElementById('formulaLen').textContent = '';
+                document.getElementById('formulaMath').textContent = '';
                 return;
             }
 
-            const kf = getEffectiveKeyframes(); // 使用有效关键帧（包含24点循环）
+            // 使用原始关键帧（按时间排序）
+            const kf = [...keyframes].sort((a, b) => a.t - b.t);
             const time = '(hours()*3600+minutes()*60+seconds())';
-            let formula = '';
 
-            // 分段 sigmoid 公式（只处理 0-24 小时范围内的段）
-            const parts = [];
+            // 起始值
+            const v0 = Math.round(minT + kf[0].v * (maxT - minT));
+            const parts = [`${v0}`];
+            const mathParts = [`${v0}`];
+
+            // 叠加每个过渡的 sigmoid
             for (let i = 0; i < kf.length - 1; i++) {
-                const t1h = kf[i].t, t2h = kf[i + 1].t;
-                // 跳过完全在 0-24 范围外的段
-                if (t2h <= 0 || t1h >= 24) continue;
-                // 裁剪条件到 0-24 范围
-                const condT1 = Math.round(Math.max(0, t1h) * 3600);
-                const condT2 = Math.round(Math.min(24, t2h) * 3600);
-                // sigmoid 参数使用原始时间
-                const t1 = Math.round(t1h * 3600), t2 = Math.round(t2h * 3600);
+                const t1 = Math.round(kf[i].t * 3600);
+                const t2 = Math.round(kf[i + 1].t * 3600);
                 const v1 = Math.round(minT + kf[i].v * (maxT - minT));
                 const v2 = Math.round(minT + kf[i + 1].v * (maxT - minT));
                 const mid = Math.round((t1 + t2) / 2);
-                const width = Math.round((t2 - t1) / 2);
-                const range = v2 - v1;
+                const width = Math.max(1, Math.round((t2 - t1) / 2));
+                const delta = v2 - v1;
 
-                const sig = `(${v1}+${range}*(1/(1+pow(e(),-${k}*(${time}-${mid})/${width}))))`;
-                const cond = `((${time}>=${condT1})*(${time}<${condT2}))`;
-                parts.push(`${sig}*${cond}`);
+                if (delta !== 0) {
+                    parts.push(`${delta}/(1+pow(e(),-${k}*(${time}-${mid})/${width}))`);
+                    mathParts.push(`${delta} × σ(${k}×(t-${fmt(mid / 3600)})/${Math.round(width / 60)}min)`);
+                }
             }
 
-            formula = `floor(${parts.join('+')})`;
+            const formula = `floor(${parts.join('+')})`;
             document.getElementById('formula').textContent = formula;
             document.getElementById('formulaLen').textContent = `公式长度: ${formula.length} 字符`;
+
+            // 数学表达式展示（KaTeX LaTeX 风格）
+            const mathTerms = [];
+            for (let i = 0; i < kf.length - 1; i++) {
+                const t1 = Math.round(kf[i].t * 3600);
+                const t2 = Math.round(kf[i + 1].t * 3600);
+                const v1 = Math.round(minT + kf[i].v * (maxT - minT));
+                const v2 = Math.round(minT + kf[i + 1].v * (maxT - minT));
+                const mid = Math.round((t1 + t2) / 2);
+                const width = Math.max(1, Math.round((t2 - t1) / 2));
+                const delta = v2 - v1;
+                if (delta !== 0) {
+                    const sign = delta > 0 ? '+' : '';
+                    mathTerms.push(`${sign}\\frac{${delta}}{1+e^{-${k} \\cdot \\frac{t-${mid}}{${width}}}}`);
+                }
+            }
+            const latex = `\\left\\lfloor ${v0}${mathTerms.join('')} \\right\\rfloor`;
+            const mathEl = document.getElementById('formulaMath');
+            if (typeof katex !== 'undefined') {
+                katex.render(latex, mathEl, { throwOnError: false, displayMode: true });
+            } else {
+                mathEl.textContent = latex;
+            }
         }
 
         function copyFormula() {
@@ -661,20 +717,38 @@
             ctxBri.fillText(`← ${minB}% (最低)`, w - 80, yMinBri + 12);
             ctxBri.setLineDash([]);
 
-            // 日出日落线
+            // 日出日落线和曙暮光
             if (lat) {
-                const sun = calcSun(lat);
-                document.getElementById('sunriseBri').textContent = fmt(sun.rise);
-                document.getElementById('sunsetBri').textContent = fmt(sun.set);
-                ctxBri.strokeStyle = '#f59e0b'; ctxBri.setLineDash([4, 4]);
-                [sun.rise, sun.set].forEach(t => {
-                    const x = t / 24 * w;
-                    ctxBri.beginPath(); ctxBri.moveTo(x, 0); ctxBri.lineTo(x, h); ctxBri.stroke();
-                });
+                const times = getSunTimes(lat);
+                const sun = times.sun;
+                const civil = times.civil;
+                document.getElementById('sunriseBri').textContent = sun ? fmt(sun.rise) : '--:--';
+                document.getElementById('sunsetBri').textContent = sun ? fmt(sun.set) : '--:--';
+                document.getElementById('civilDawnBri').textContent = civil ? fmt(civil.rise) : '--:--';
+                document.getElementById('civilDuskBri').textContent = civil ? fmt(civil.set) : '--:--';
+
+                // 绘制曙暮光线（淡色）
+                if (civil) {
+                    ctxBri.strokeStyle = '#fbbf24'; ctxBri.setLineDash([2, 4]);
+                    [civil.rise, civil.set].forEach(t => {
+                        const x = t / 24 * w;
+                        ctxBri.beginPath(); ctxBri.moveTo(x, 0); ctxBri.lineTo(x, h); ctxBri.stroke();
+                    });
+                }
+                // 绘制日出日落线
+                if (sun) {
+                    ctxBri.strokeStyle = '#f59e0b'; ctxBri.setLineDash([4, 4]);
+                    [sun.rise, sun.set].forEach(t => {
+                        const x = t / 24 * w;
+                        ctxBri.beginPath(); ctxBri.moveTo(x, 0); ctxBri.lineTo(x, h); ctxBri.stroke();
+                    });
+                }
                 ctxBri.setLineDash([]);
             } else {
                 document.getElementById('sunriseBri').textContent = '--:--';
                 document.getElementById('sunsetBri').textContent = '--:--';
+                document.getElementById('civilDawnBri').textContent = '--:--';
+                document.getElementById('civilDuskBri').textContent = '--:--';
             }
 
             // 曲线
@@ -747,52 +821,76 @@
         function resetKeyframesBri() {
             const lat = getVal('latitudeBri');
             if (lat) {
-                const sun = calcSun(lat);
-                keyframesBri = [
-                    { t: 0, v: 0 },
-                    { t: sun.rise, v: 0 },
-                    { t: sun.rise + 1, v: 1 },
-                    { t: sun.set - 1, v: 1 },
-                    { t: sun.set, v: 0 },
-                    { t: 24, v: 0 }
-                ];
+                const times = getSunTimes(lat);
+                const sun = times.sun;
+                const civil = times.civil;
+                if (sun && civil) {
+                    // 使用曙暮光时间：从民用曙光开始渐亮，到民用暮光结束渐暗
+                    keyframesBri = [
+                        { t: 0, v: 0 },
+                        { t: civil.rise, v: 0 },      // 民用曙光开始
+                        { t: sun.rise, v: 1 },        // 日出时达到最亮
+                        { t: sun.set, v: 1 },         // 日落前保持最亮
+                        { t: civil.set, v: 0 },       // 民用暮光结束
+                        { t: 24, v: 0 }
+                    ];
+                } else if (sun) {
+                    // 没有曙暮光数据时使用日出日落
+                    keyframesBri = [
+                        { t: 0, v: 0 },
+                        { t: sun.rise, v: 0 },
+                        { t: sun.rise + 1, v: 1 },
+                        { t: sun.set - 1, v: 1 },
+                        { t: sun.set, v: 0 },
+                        { t: 24, v: 0 }
+                    ];
+                } else {
+                    // 极昼或极夜
+                    keyframesBri = [{ t: 0, v: 0.5 }, { t: 12, v: 0.5 }];
+                }
             } else {
                 keyframesBri = [{ t: 0, v: 0 }, { t: 12, v: 1 }];
             }
             drawBri(); updateBri();
         }
 
+        // 生成亮度公式（使用 sigmoid 叠加，无比较符号）
         function generateFormulaBri() {
             const lat = getVal('latitudeBri'), k = getVal('steepnessBri');
             const minB = getVal('minBri'), maxB = 100;
             if (!lat || keyframesBri.length < 2) {
                 document.getElementById('formulaBri').textContent = '请输入纬度并确保至少有2个关键帧';
                 document.getElementById('formulaLenBri').textContent = '';
+                document.getElementById('formulaMathBri').textContent = '';
                 return;
             }
 
-            const kf = getEffectiveKeyframesBri();
+            const kf = [...keyframesBri].sort((a, b) => a.t - b.t);
             const time = '(hours()*3600+minutes()*60+seconds())';
-            const parts = [];
+
+            const v0 = Math.round(minB + kf[0].v * (maxB - minB));
+            const parts = [`${v0}`];
+            const mathParts = [`${v0}`];
+
             for (let i = 0; i < kf.length - 1; i++) {
-                const t1h = kf[i].t, t2h = kf[i + 1].t;
-                if (t2h <= 0 || t1h >= 24) continue;
-                const condT1 = Math.round(Math.max(0, t1h) * 3600);
-                const condT2 = Math.round(Math.min(24, t2h) * 3600);
-                const t1 = Math.round(t1h * 3600), t2 = Math.round(t2h * 3600);
+                const t1 = Math.round(kf[i].t * 3600);
+                const t2 = Math.round(kf[i + 1].t * 3600);
                 const v1 = Math.round(minB + kf[i].v * (maxB - minB));
                 const v2 = Math.round(minB + kf[i + 1].v * (maxB - minB));
                 const mid = Math.round((t1 + t2) / 2);
-                const width = Math.round((t2 - t1) / 2);
-                const range = v2 - v1;
-                const sig = `(${v1}+${range}*(1/(1+pow(e(),-${k}*(${time}-${mid})/${width}))))`;
-                const cond = `((${time}>=${condT1})*(${time}<${condT2}))`;
-                parts.push(`${sig}*${cond}`);
+                const width = Math.max(1, Math.round((t2 - t1) / 2));
+                const delta = v2 - v1;
+
+                if (delta !== 0) {
+                    parts.push(`${delta}/(1+pow(e(),-${k}*(${time}-${mid})/${width}))`);
+                    mathParts.push(`${delta} × σ(${k}×(t-${fmt(mid / 3600)})/${Math.round(width / 60)}min)`);
+                }
             }
 
             const formula = `floor(${parts.join('+')})`;
             document.getElementById('formulaBri').textContent = formula;
             document.getElementById('formulaLenBri').textContent = `公式长度: ${formula.length} 字符`;
+            document.getElementById('formulaMathBri').innerHTML = `<b>数学形式:</b> floor(${mathParts.join(' + ')})`;
         }
 
         function copyFormulaBri() {
