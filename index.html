@@ -286,11 +286,14 @@
         // Sigmoid 插值 (支持24小时循环)
         function sigmoid(x) { return 1 / (1 + Math.exp(-x)); }
         function getEffectiveKeyframes() {
-            // 如果最后一个关键帧不是24点，自动添加虚拟24点（值等于0点）形成循环
+            if (keyframes.length < 2) return keyframes;
             const kf = [...keyframes];
-            if (kf.length >= 2 && kf[kf.length - 1].t < 24 && kf[0].t === 0) {
-                kf.push({ t: 24, v: kf[0].v });
-            }
+            const first = kf[0];
+            const last = kf[kf.length - 1];
+            // 添加前一天最后一个关键帧（用于 0:00 附近的插值）
+            kf.unshift({ t: last.t - 24, v: last.v });
+            // 添加后一天第一个关键帧（用于 24:00 附近的插值）
+            kf.push({ t: first.t + 24, v: first.v });
             return kf;
         }
         function interpolate(t) {
@@ -477,31 +480,27 @@
             const time = '(hours()*3600+minutes()*60+seconds())';
             let formula = '';
 
-            // 分段 sigmoid 公式
+            // 分段 sigmoid 公式（只处理 0-24 小时范围内的段）
             const parts = [];
             for (let i = 0; i < kf.length - 1; i++) {
-                const t1 = Math.round(kf[i].t * 3600);
-                const t2 = Math.round(kf[i + 1].t * 3600);
+                const t1h = kf[i].t, t2h = kf[i + 1].t;
+                // 跳过完全在 0-24 范围外的段
+                if (t2h <= 0 || t1h >= 24) continue;
+                // 裁剪条件到 0-24 范围
+                const condT1 = Math.round(Math.max(0, t1h) * 3600);
+                const condT2 = Math.round(Math.min(24, t2h) * 3600);
+                // sigmoid 参数使用原始时间
+                const t1 = Math.round(t1h * 3600), t2 = Math.round(t2h * 3600);
                 const v1 = Math.round(minT + kf[i].v * (maxT - minT));
                 const v2 = Math.round(minT + kf[i + 1].v * (maxT - minT));
                 const mid = Math.round((t1 + t2) / 2);
                 const width = Math.round((t2 - t1) / 2);
                 const range = v2 - v1;
 
-                // sigmoid: v1 + range * (1/(1+e^(-k*(t-mid)/width)))
                 const sig = `(${v1}+${range}*(1/(1+pow(e(),-${k}*(${time}-${mid})/${width}))))`;
-                // 条件: t >= t1 && t < t2
-                const cond = `((${time}>=${t1})*(${time}<${t2}))`;
+                const cond = `((${time}>=${condT1})*(${time}<${condT2}))`;
                 parts.push(`${sig}*${cond}`);
             }
-
-            // 边界处理
-            const firstV = Math.round(minT + kf[0].v * (maxT - minT));
-            const lastV = Math.round(minT + kf[kf.length - 1].v * (maxT - minT));
-            const firstT = Math.round(kf[0].t * 3600);
-            const lastT = Math.round(kf[kf.length - 1].t * 3600);
-            parts.unshift(`${firstV}*(${time}<${firstT})`);
-            parts.push(`${lastV}*(${time}>=${lastT})`);
 
             formula = `floor(${parts.join('+')})`;
             document.getElementById('formula').textContent = formula;
@@ -584,18 +583,25 @@
         function getPosBri(e) { const r = canvasBri.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
         function findKFBri(p) {
             const w = canvasBri.offsetWidth, h = canvasBri.offsetHeight;
+            const minB = getVal('minBri'), maxB = 100;
             for (let i = 0; i < keyframesBri.length; i++) {
-                const kx = keyframesBri[i].t / 24 * w, ky = (1 - keyframesBri[i].v) * h;
+                // 将归一化值转换为实际亮度百分比
+                const actualBri = (minB + keyframesBri[i].v * (maxB - minB)) / 100;
+                const kx = keyframesBri[i].t / 24 * w, ky = vToYBri(actualBri, h);
                 if (Math.hypot(kx - p.x, ky - p.y) < 10) return i;
             }
             return -1;
         }
 
         function getEffectiveKeyframesBri() {
+            if (keyframesBri.length < 2) return keyframesBri;
             const kf = [...keyframesBri];
-            if (kf.length >= 2 && kf[kf.length - 1].t < 24 && kf[0].t === 0) {
-                kf.push({ t: 24, v: kf[0].v });
-            }
+            const first = kf[0];
+            const last = kf[kf.length - 1];
+            // 添加前一天最后一个关键帧（用于 0:00 附近的插值）
+            kf.unshift({ t: last.t - 24, v: last.v });
+            // 添加后一天第一个关键帧（用于 24:00 附近的插值）
+            kf.push({ t: first.t + 24, v: first.v });
             return kf;
         }
 
@@ -675,7 +681,9 @@
             ctxBri.strokeStyle = '#10b981'; ctxBri.lineWidth = 2;
             ctxBri.beginPath();
             for (let t = 0; t <= 24; t += 0.05) {
-                const x = t / 24 * w, y = vToYBri(interpolateBri(t), h);
+                // 将归一化值转换为实际亮度百分比
+                const actualBri = (minB + interpolateBri(t) * (maxB - minB)) / 100;
+                const x = t / 24 * w, y = vToYBri(actualBri, h);
                 t === 0 ? ctxBri.moveTo(x, y) : ctxBri.lineTo(x, y);
             }
             ctxBri.stroke();
@@ -683,7 +691,9 @@
             // 关键帧点
             keyframesBri.forEach((kf, i) => {
                 ctxBri.beginPath();
-                ctxBri.arc(kf.t / 24 * w, vToYBri(kf.v, h), 7, 0, Math.PI * 2);
+                // 将归一化值转换为实际亮度百分比
+                const actualBri = (minB + kf.v * (maxB - minB)) / 100;
+                ctxBri.arc(kf.t / 24 * w, vToYBri(actualBri, h), 7, 0, Math.PI * 2);
                 ctxBri.fillStyle = i === draggingBri ? '#ef4444' : '#10b981';
                 ctxBri.fill();
                 ctxBri.strokeStyle = '#fff'; ctxBri.lineWidth = 2; ctxBri.stroke();
@@ -765,24 +775,20 @@
             const time = '(hours()*3600+minutes()*60+seconds())';
             const parts = [];
             for (let i = 0; i < kf.length - 1; i++) {
-                const t1 = Math.round(kf[i].t * 3600);
-                const t2 = Math.round(kf[i + 1].t * 3600);
+                const t1h = kf[i].t, t2h = kf[i + 1].t;
+                if (t2h <= 0 || t1h >= 24) continue;
+                const condT1 = Math.round(Math.max(0, t1h) * 3600);
+                const condT2 = Math.round(Math.min(24, t2h) * 3600);
+                const t1 = Math.round(t1h * 3600), t2 = Math.round(t2h * 3600);
                 const v1 = Math.round(minB + kf[i].v * (maxB - minB));
                 const v2 = Math.round(minB + kf[i + 1].v * (maxB - minB));
                 const mid = Math.round((t1 + t2) / 2);
                 const width = Math.round((t2 - t1) / 2);
                 const range = v2 - v1;
                 const sig = `(${v1}+${range}*(1/(1+pow(e(),-${k}*(${time}-${mid})/${width}))))`;
-                const cond = `((${time}>=${t1})*(${time}<${t2}))`;
+                const cond = `((${time}>=${condT1})*(${time}<${condT2}))`;
                 parts.push(`${sig}*${cond}`);
             }
-
-            const firstV = Math.round(minB + kf[0].v * (maxB - minB));
-            const lastV = Math.round(minB + kf[kf.length - 1].v * (maxB - minB));
-            const firstT = Math.round(kf[0].t * 3600);
-            const lastT = Math.round(kf[kf.length - 1].t * 3600);
-            parts.unshift(`${firstV}*(${time}<${firstT})`);
-            parts.push(`${lastV}*(${time}>=${lastT})`);
 
             const formula = `floor(${parts.join('+')})`;
             document.getElementById('formulaBri').textContent = formula;
