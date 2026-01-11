@@ -329,22 +329,28 @@
             kf.push({ t: first.t + 24, v: first.v });
             return kf;
         }
+        // 使用 sigmoid 叠加方式插值（与公式一致）
         function interpolate(t) {
             if (keyframes.length < 2) return 0.5;
             const kf = getEffectiveKeyframes();
             const k = getVal('steepness');
-            if (t <= kf[0].t) return kf[0].v;
-            if (t >= kf[kf.length - 1].t) return kf[kf.length - 1].v;
+
+            // 起始值
+            let value = kf[0].v;
+
+            // 叠加每个过渡的 sigmoid
             for (let i = 0; i < kf.length - 1; i++) {
-                if (t >= kf[i].t && t <= kf[i + 1].t) {
-                    const mid = (kf[i].t + kf[i + 1].t) / 2;
-                    const width = (kf[i + 1].t - kf[i].t) / 2;
+                const t1 = kf[i].t;
+                const t2 = kf[i + 1].t;
+                const delta = kf[i + 1].v - kf[i].v;
+                if (delta !== 0) {
+                    const mid = (t1 + t2) / 2;
+                    const width = Math.max(0.001, (t2 - t1) / 2);
                     const x = k * (t - mid) / width;
-                    const s = sigmoid(x);
-                    return kf[i].v + (kf[i + 1].v - kf[i].v) * s;
+                    value += delta * sigmoid(x);
                 }
             }
-            return kf[kf.length - 1].v;
+            return Math.max(0, Math.min(1, value));
         }
 
         // Y轴留白比例
@@ -661,22 +667,28 @@
             return kf;
         }
 
+        // 使用 sigmoid 叠加方式插值（与公式一致）
         function interpolateBri(t) {
             if (keyframesBri.length < 2) return 0.5;
-            const kf = getEffectiveKeyframesBri();
+            const kf = [...keyframesBri].sort((a, b) => a.t - b.t);
             const k = getVal('steepnessBri');
-            if (t <= kf[0].t) return kf[0].v;
-            if (t >= kf[kf.length - 1].t) return kf[kf.length - 1].v;
+
+            // 起始值
+            let value = kf[0].v;
+
+            // 叠加每个过渡的 sigmoid
             for (let i = 0; i < kf.length - 1; i++) {
-                if (t >= kf[i].t && t <= kf[i + 1].t) {
-                    const mid = (kf[i].t + kf[i + 1].t) / 2;
-                    const width = (kf[i + 1].t - kf[i].t) / 2;
+                const t1 = kf[i].t;
+                const t2 = kf[i + 1].t;
+                const delta = kf[i + 1].v - kf[i].v;
+                if (delta !== 0) {
+                    const mid = (t1 + t2) / 2;
+                    const width = Math.max(0.001, (t2 - t1) / 2);
                     const x = k * (t - mid) / width;
-                    const s = sigmoid(x);
-                    return kf[i].v + (kf[i + 1].v - kf[i].v) * s;
+                    value += delta * sigmoid(x);
                 }
             }
-            return kf[kf.length - 1].v;
+            return Math.max(0, Math.min(1, value));
         }
 
         // 亮度 Y 轴固定 0-100
