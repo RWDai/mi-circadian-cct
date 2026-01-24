@@ -253,6 +253,39 @@
         let keyframesBri = [], draggingBri = -1, canvasBri, ctxBri;
         const getVal = id => parseFloat(document.getElementById(id).value) || 0;
 
+        // 关键帧类型辅助函数
+        function resolveKeyframeTime(kf, sunTimes) {
+            if (kf.type === 'fixed') return kf.t;
+            const offset = kf.offset || 0;
+            const times = {
+                sunrise: sunTimes.sun?.rise || 6,
+                sunset: sunTimes.sun?.set || 18,
+                civil_dawn: sunTimes.civil?.rise || 5.5,
+                civil_dusk: sunTimes.civil?.set || 18.5
+            };
+            return Math.max(0, Math.min(24, times[kf.type] + offset));
+        }
+
+        function getKeyframeColor(type) {
+            return {
+                fixed: '#3b82f6',
+                sunrise: '#f59e0b',
+                sunset: '#f59e0b',
+                civil_dawn: '#fbbf24',
+                civil_dusk: '#fbbf24'
+            }[type] || '#3b82f6';
+        }
+
+        function formatOffset(hours) {
+            if (!hours) return '';
+            const sign = hours > 0 ? '+' : '';
+            const h = Math.floor(Math.abs(hours));
+            const m = Math.round((Math.abs(hours) % 1) * 60);
+            if (h === 0) return `${sign}${m}min`;
+            if (m === 0) return `${sign}${h}h`;
+            return `${sign}${h}h${m}min`;
+        }
+
         // 日出日落计算（支持不同太阳高度角）
         function calcSun(lat, angle = -0.833) {
             const day = Math.floor((new Date() - new Date(new Date().getFullYear(), 0, 0)) / 864e5);
@@ -309,8 +342,11 @@
         function getPos(e) { const r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
         function findKF(p) {
             const w = canvas.offsetWidth, h = canvas.offsetHeight;
+            const lat = getVal('latitude');
+            const sunTimes = lat ? getSunTimes(lat) : null;
             for (let i = 0; i < keyframes.length; i++) {
-                const kx = keyframes[i].t / 24 * w, ky = (1 - keyframes[i].v) * h;
+                const t = sunTimes ? resolveKeyframeTime(keyframes[i], sunTimes) : (keyframes[i].t || 0);
+                const kx = t / 24 * w, ky = (1 - keyframes[i].v) * h;
                 if (Math.hypot(kx - p.x, ky - p.y) < 10) return i;
             }
             return -1;
@@ -320,14 +356,17 @@
         function sigmoid(x) { return 1 / (1 + Math.exp(-x)); }
         function getEffectiveKeyframes() {
             if (keyframes.length < 2) return keyframes;
-            const kf = [...keyframes];
-            const first = kf[0];
-            const last = kf[kf.length - 1];
-            // 添加前一天最后一个关键帧（用于 0:00 附近的插值）
-            kf.unshift({ t: last.t - 24, v: last.v });
-            // 添加后一天第一个关键帧（用于 24:00 附近的插值）
-            kf.push({ t: first.t + 24, v: first.v });
-            return kf;
+            const lat = getVal('latitude');
+            const sunTimes = lat ? getSunTimes(lat) : null;
+            const resolved = keyframes.map(kf => ({
+                t: sunTimes ? resolveKeyframeTime(kf, sunTimes) : (kf.t || 0),
+                v: kf.v
+            }));
+            const first = resolved[0];
+            const last = resolved[resolved.length - 1];
+            resolved.unshift({ t: last.t - 24, v: last.v });
+            resolved.push({ t: first.t + 24, v: first.v });
+            return resolved;
         }
         // 使用 sigmoid 叠加方式插值（与公式一致）
         function interpolate(t) {
@@ -450,10 +489,12 @@
             ctx.stroke();
 
             // 关键帧点
+            const sunTimes = lat ? getSunTimes(lat) : null;
             keyframes.forEach((kf, i) => {
+                const t = sunTimes ? resolveKeyframeTime(kf, sunTimes) : (kf.t || 0);
                 ctx.beginPath();
-                ctx.arc(kf.t / 24 * w, vToY(kf.v, h), 7, 0, Math.PI * 2);
-                ctx.fillStyle = i === dragging ? '#ef4444' : '#3b82f6';
+                ctx.arc(t / 24 * w, vToY(kf.v, h), 7, 0, Math.PI * 2);
+                ctx.fillStyle = i === dragging ? '#ef4444' : getKeyframeColor(kf.type || 'fixed');
                 ctx.fill();
                 ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
             });
@@ -462,16 +503,44 @@
         // 更新关键帧列表和公式
         function update() {
             const minT = getVal('minTemp'), maxT = getVal('maxTemp');
+            const lat = getVal('latitude');
+            const sunTimes = lat ? getSunTimes(lat) : null;
             const list = document.getElementById('keyframeList');
             list.innerHTML = keyframes.map((kf, i) => {
                 const temp = Math.round(minT + kf.v * (maxT - minT));
-                const h = Math.floor(kf.t), m = Math.floor((kf.t % 1) * 60);
+                const type = kf.type || 'fixed';
+                const resolvedTime = sunTimes ? resolveKeyframeTime(kf, sunTimes) : (kf.t || 0);
+                const h = Math.floor(type === 'fixed' ? (kf.t || 0) : resolvedTime);
+                const m = Math.floor((type === 'fixed' ? (kf.t || 0) : resolvedTime) % 1 * 60);
+                const offsetH = Math.floor(Math.abs(kf.offset || 0));
+                const offsetM = Math.round((Math.abs(kf.offset || 0) % 1) * 60);
+                const offsetSign = (kf.offset || 0) >= 0 ? '+' : '-';
+
                 return `<div class="flex items-center gap-2 text-xs py-1.5 px-2 bg-gray-50 dark:bg-neutral-900 rounded">
-                    <input type="number" value="${h}" min="0" max="23" onchange="updateKF(${i},'h',this.value)" class="w-12 px-1 py-0.5 border border-gray-200 dark:border-neutral-700 rounded text-center dark:bg-neutral-800 dark:text-white">
-                    <span class="text-gray-400">:</span>
-                    <input type="number" value="${m}" min="0" max="59" step="5" onchange="updateKF(${i},'m',this.value)" class="w-12 px-1 py-0.5 border border-gray-200 dark:border-neutral-700 rounded text-center dark:bg-neutral-800 dark:text-white">
+                    <select onchange="updateKF(${i},'type',this.value)" class="px-1 py-0.5 border border-gray-200 dark:border-neutral-700 rounded text-center dark:bg-neutral-800 dark:text-white" style="font-size:10px">
+                        <option value="fixed" ${type === 'fixed' ? 'selected' : ''}>固定</option>
+                        <option value="sunrise" ${type === 'sunrise' ? 'selected' : ''}>日出</option>
+                        <option value="sunset" ${type === 'sunset' ? 'selected' : ''}>日落</option>
+                        <option value="civil_dawn" ${type === 'civil_dawn' ? 'selected' : ''}>曙光</option>
+                        <option value="civil_dusk" ${type === 'civil_dusk' ? 'selected' : ''}>暮光</option>
+                    </select>
+                    ${type === 'fixed' ? `
+                        <input type="number" value="${h}" min="0" max="23" onchange="updateKF(${i},'h',this.value)" class="w-12 px-1 py-0.5 border border-gray-200 dark:border-neutral-700 rounded text-center dark:bg-neutral-800 dark:text-white">
+                        <span class="text-gray-400">:</span>
+                        <input type="number" value="${m}" min="0" max="59" step="5" onchange="updateKF(${i},'m',this.value)" class="w-12 px-1 py-0.5 border border-gray-200 dark:border-neutral-700 rounded text-center dark:bg-neutral-800 dark:text-white">
+                    ` : `
+                        <select onchange="updateKF(${i},'offsetSign',this.value)" class="w-8 px-1 py-0.5 border border-gray-200 dark:border-neutral-700 rounded text-center dark:bg-neutral-800 dark:text-white">
+                            <option value="+" ${offsetSign === '+' ? 'selected' : ''}>+</option>
+                            <option value="-" ${offsetSign === '-' ? 'selected' : ''}>-</option>
+                        </select>
+                        <input type="number" value="${offsetH}" min="0" max="5" onchange="updateKF(${i},'offsetH',this.value)" class="w-10 px-1 py-0.5 border border-gray-200 dark:border-neutral-700 rounded text-center dark:bg-neutral-800 dark:text-white">
+                        <span class="text-gray-400">h</span>
+                        <input type="number" value="${offsetM}" min="0" max="59" step="5" onchange="updateKF(${i},'offsetM',this.value)" class="w-10 px-1 py-0.5 border border-gray-200 dark:border-neutral-700 rounded text-center dark:bg-neutral-800 dark:text-white">
+                        <span class="text-gray-400">m</span>
+                        <span class="text-gray-400" style="font-size:9px">(${fmt(resolvedTime)})</span>
+                    `}
                     <span class="text-gray-400 mx-1">→</span>
-                    <input type="number" value="${temp}" min="${minT}" max="${maxT}" step="100" onchange="updateKF(${i},'t',this.value)" class="w-16 px-1 py-0.5 border border-gray-200 dark:border-neutral-700 rounded text-center dark:bg-neutral-800 dark:text-white">
+                    <input type="number" value="${temp}" min="${minT}" max="${maxT}" step="100" onchange="updateKF(${i},'temp',this.value)" class="w-16 px-1 py-0.5 border border-gray-200 dark:border-neutral-700 rounded text-center dark:bg-neutral-800 dark:text-white">
                     <span class="text-gray-500">K</span>
                     ${keyframes.length > 2 ? `<button onclick="deleteKF(${i})" class="ml-auto text-red-500 hover:text-red-700">×</button>` : ''}
                 </div>`;
@@ -479,18 +548,44 @@
             generateFormula();
         }
 
-        function updateKF(i, type, val) {
+        function updateKF(i, field, val) {
             const minT = getVal('minTemp'), maxT = getVal('maxTemp');
-            if (type === 'h') {
-                const m = (keyframes[i].t % 1) * 60;
-                keyframes[i].t = Math.max(0, Math.min(24, parseInt(val) + m / 60));
-            } else if (type === 'm') {
-                const h = Math.floor(keyframes[i].t);
-                keyframes[i].t = Math.max(0, Math.min(24, h + parseInt(val) / 60));
-            } else if (type === 't') {
-                keyframes[i].v = (parseInt(val) - minT) / (maxT - minT);
+            const kf = keyframes[i];
+            if (field === 'type') {
+                kf.type = val;
+                if (val === 'fixed') {
+                    kf.t = kf.t || 12;
+                    delete kf.offset;
+                } else {
+                    kf.offset = kf.offset || 0;
+                    delete kf.t;
+                }
+            } else if (field === 'h') {
+                const m = ((kf.t || 0) % 1) * 60;
+                kf.t = Math.max(0, Math.min(24, parseInt(val) + m / 60));
+            } else if (field === 'm') {
+                const h = Math.floor(kf.t || 0);
+                kf.t = Math.max(0, Math.min(24, h + parseInt(val) / 60));
+            } else if (field === 'offsetSign') {
+                kf.offset = (val === '+' ? 1 : -1) * Math.abs(kf.offset || 0);
+            } else if (field === 'offsetH') {
+                const sign = (kf.offset || 0) >= 0 ? 1 : -1;
+                const m = (Math.abs(kf.offset || 0) % 1) * 60;
+                kf.offset = sign * (parseInt(val) + m / 60);
+            } else if (field === 'offsetM') {
+                const sign = (kf.offset || 0) >= 0 ? 1 : -1;
+                const h = Math.floor(Math.abs(kf.offset || 0));
+                kf.offset = sign * (h + parseInt(val) / 60);
+            } else if (field === 'temp') {
+                kf.v = (parseInt(val) - minT) / (maxT - minT);
             }
-            keyframes.sort((a, b) => a.t - b.t);
+            const lat = getVal('latitude');
+            const sunTimes = lat ? getSunTimes(lat) : null;
+            keyframes.sort((a, b) => {
+                const ta = sunTimes ? resolveKeyframeTime(a, sunTimes) : (a.t || 0);
+                const tb = sunTimes ? resolveKeyframeTime(b, sunTimes) : (b.t || 0);
+                return ta - tb;
+            });
             draw(); update();
         }
 
@@ -499,9 +594,14 @@
         }
 
         function addKeyframe() {
-            const minT = getVal('minTemp'), maxT = getVal('maxTemp');
-            keyframes.push({ t: 12, v: 0.5 });
-            keyframes.sort((a, b) => a.t - b.t);
+            keyframes.push({ type: 'fixed', t: 12, v: 0.5 });
+            const lat = getVal('latitude');
+            const sunTimes = lat ? getSunTimes(lat) : null;
+            keyframes.sort((a, b) => {
+                const ta = sunTimes ? resolveKeyframeTime(a, sunTimes) : (a.t || 0);
+                const tb = sunTimes ? resolveKeyframeTime(b, sunTimes) : (b.t || 0);
+                return ta - tb;
+            });
             draw(); update();
         }
 
@@ -516,21 +616,26 @@
                 return;
             }
 
-            // 使用原始关键帧（按时间排序）
-            const kf = [...keyframes].sort((a, b) => a.t - b.t);
+            // 解析关键帧时间
+            const sunTimes = getSunTimes(lat);
+            const resolved = keyframes.map(kf => ({
+                t: resolveKeyframeTime(kf, sunTimes),
+                v: kf.v
+            })).sort((a, b) => a.t - b.t);
+
             const time = '(hours()*3600+minutes()*60+seconds())';
 
             // 起始值
-            const v0 = Math.round(minT + kf[0].v * (maxT - minT));
+            const v0 = Math.round(minT + resolved[0].v * (maxT - minT));
             const parts = [`${v0}`];
             const mathParts = [`${v0}`];
 
             // 叠加每个过渡的 sigmoid
-            for (let i = 0; i < kf.length - 1; i++) {
-                const t1 = Math.round(kf[i].t * 3600);
-                const t2 = Math.round(kf[i + 1].t * 3600);
-                const v1 = Math.round(minT + kf[i].v * (maxT - minT));
-                const v2 = Math.round(minT + kf[i + 1].v * (maxT - minT));
+            for (let i = 0; i < resolved.length - 1; i++) {
+                const t1 = Math.round(resolved[i].t * 3600);
+                const t2 = Math.round(resolved[i + 1].t * 3600);
+                const v1 = Math.round(minT + resolved[i].v * (maxT - minT));
+                const v2 = Math.round(minT + resolved[i + 1].v * (maxT - minT));
                 const mid = Math.round((t1 + t2) / 2);
                 const width = Math.max(1, Math.round((t2 - t1) / 2));
                 const delta = v2 - v1;
@@ -543,15 +648,22 @@
 
             const formula = `floor(${parts.join('+')})`;
             document.getElementById('formula').textContent = formula;
-            document.getElementById('formulaLen').textContent = `公式长度: ${formula.length} 字符`;
+
+            // 添加日期警告
+            const hasAnchor = keyframes.some(kf => kf.type !== 'fixed');
+            const today = new Date();
+            const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+            const sun = sunTimes.sun;
+            const warning = hasAnchor ? `\n\n⚠️ 此公式基于 ${dateStr} 的日出日落时间计算\n   日出: ${sun ? fmt(sun.rise) : '--:--'}  日落: ${sun ? fmt(sun.set) : '--:--'}\n   建议每月重新生成以保持准确` : '';
+            document.getElementById('formulaLen').textContent = `公式长度: ${formula.length} 字符${warning}`;
 
             // 数学表达式展示（KaTeX LaTeX 风格）
             const mathTerms = [];
-            for (let i = 0; i < kf.length - 1; i++) {
-                const t1 = Math.round(kf[i].t * 3600);
-                const t2 = Math.round(kf[i + 1].t * 3600);
-                const v1 = Math.round(minT + kf[i].v * (maxT - minT));
-                const v2 = Math.round(minT + kf[i + 1].v * (maxT - minT));
+            for (let i = 0; i < resolved.length - 1; i++) {
+                const t1 = Math.round(resolved[i].t * 3600);
+                const t2 = Math.round(resolved[i + 1].t * 3600);
+                const v1 = Math.round(minT + resolved[i].v * (maxT - minT));
+                const v2 = Math.round(minT + resolved[i + 1].v * (maxT - minT));
                 const mid = Math.round((t1 + t2) / 2);
                 const width = Math.max(1, Math.round((t2 - t1) / 2));
                 const delta = v2 - v1;
@@ -577,17 +689,16 @@
         function resetKeyframes() {
             const lat = getVal('latitude');
             if (lat) {
-                const sun = calcSun(lat);
                 keyframes = [
-                    { t: 0, v: 0 },
-                    { t: sun.rise, v: 0 },
-                    { t: sun.rise + 1, v: 1 },
-                    { t: sun.set - 1, v: 1 },
-                    { t: sun.set, v: 0 },
-                    { t: 24, v: 0 }
+                    { type: 'fixed', t: 0, v: 0 },
+                    { type: 'sunrise', offset: 0, v: 0 },
+                    { type: 'sunrise', offset: 1, v: 1 },
+                    { type: 'sunset', offset: -1, v: 1 },
+                    { type: 'sunset', offset: 0, v: 0 },
+                    { type: 'fixed', t: 24, v: 0 }
                 ];
             } else {
-                keyframes = [{ t: 0, v: 0 }, { t: 12, v: 1 }];
+                keyframes = [{ type: 'fixed', t: 0, v: 0 }, { type: 'fixed', t: 12, v: 1 }];
             }
             draw(); update();
         }
@@ -646,10 +757,12 @@
         function findKFBri(p) {
             const w = canvasBri.offsetWidth, h = canvasBri.offsetHeight;
             const minB = getVal('minBri'), maxB = 100;
+            const lat = getVal('latitudeBri');
+            const sunTimes = lat ? getSunTimes(lat) : null;
             for (let i = 0; i < keyframesBri.length; i++) {
-                // 将归一化值转换为实际亮度百分比
+                const t = sunTimes ? resolveKeyframeTime(keyframesBri[i], sunTimes) : (keyframesBri[i].t || 0);
                 const actualBri = (minB + keyframesBri[i].v * (maxB - minB)) / 100;
-                const kx = keyframesBri[i].t / 24 * w, ky = vToYBri(actualBri, h);
+                const kx = t / 24 * w, ky = vToYBri(actualBri, h);
                 if (Math.hypot(kx - p.x, ky - p.y) < 10) return i;
             }
             return -1;
@@ -657,14 +770,17 @@
 
         function getEffectiveKeyframesBri() {
             if (keyframesBri.length < 2) return keyframesBri;
-            const kf = [...keyframesBri];
-            const first = kf[0];
-            const last = kf[kf.length - 1];
-            // 添加前一天最后一个关键帧（用于 0:00 附近的插值）
-            kf.unshift({ t: last.t - 24, v: last.v });
-            // 添加后一天第一个关键帧（用于 24:00 附近的插值）
-            kf.push({ t: first.t + 24, v: first.v });
-            return kf;
+            const lat = getVal('latitudeBri');
+            const sunTimes = lat ? getSunTimes(lat) : null;
+            const resolved = keyframesBri.map(kf => ({
+                t: sunTimes ? resolveKeyframeTime(kf, sunTimes) : (kf.t || 0),
+                v: kf.v
+            }));
+            const first = resolved[0];
+            const last = resolved[resolved.length - 1];
+            resolved.unshift({ t: last.t - 24, v: last.v });
+            resolved.push({ t: first.t + 24, v: first.v });
+            return resolved;
         }
 
         // 使用 sigmoid 叠加方式插值（与公式一致）
@@ -775,12 +891,13 @@
             ctxBri.stroke();
 
             // 关键帧点
+            const sunTimesBri = lat ? getSunTimes(lat) : null;
             keyframesBri.forEach((kf, i) => {
+                const t = sunTimesBri ? resolveKeyframeTime(kf, sunTimesBri) : (kf.t || 0);
                 ctxBri.beginPath();
-                // 将归一化值转换为实际亮度百分比
                 const actualBri = (minB + kf.v * (maxB - minB)) / 100;
-                ctxBri.arc(kf.t / 24 * w, vToYBri(actualBri, h), 7, 0, Math.PI * 2);
-                ctxBri.fillStyle = i === draggingBri ? '#ef4444' : '#10b981';
+                ctxBri.arc(t / 24 * w, vToYBri(actualBri, h), 7, 0, Math.PI * 2);
+                ctxBri.fillStyle = i === draggingBri ? '#ef4444' : getKeyframeColor(kf.type || 'fixed');
                 ctxBri.fill();
                 ctxBri.strokeStyle = '#fff'; ctxBri.lineWidth = 2; ctxBri.stroke();
             });
@@ -788,16 +905,44 @@
 
         function updateBri() {
             const minB = getVal('minBri'), maxB = 100;
+            const lat = getVal('latitudeBri');
+            const sunTimes = lat ? getSunTimes(lat) : null;
             const list = document.getElementById('keyframeListBri');
             list.innerHTML = keyframesBri.map((kf, i) => {
                 const bri = Math.round(minB + kf.v * (maxB - minB));
-                const hr = Math.floor(kf.t), m = Math.floor((kf.t % 1) * 60);
+                const type = kf.type || 'fixed';
+                const resolvedTime = sunTimes ? resolveKeyframeTime(kf, sunTimes) : (kf.t || 0);
+                const hr = Math.floor(type === 'fixed' ? (kf.t || 0) : resolvedTime);
+                const m = Math.floor((type === 'fixed' ? (kf.t || 0) : resolvedTime) % 1 * 60);
+                const offsetH = Math.floor(Math.abs(kf.offset || 0));
+                const offsetM = Math.round((Math.abs(kf.offset || 0) % 1) * 60);
+                const offsetSign = (kf.offset || 0) >= 0 ? '+' : '-';
+
                 return `<div class="flex items-center gap-2 text-xs py-1.5 px-2 bg-gray-50 dark:bg-neutral-900 rounded">
-                    <input type="number" value="${hr}" min="0" max="23" onchange="updateKFBri(${i},'h',this.value)" class="w-12 px-1 py-0.5 border border-gray-200 dark:border-neutral-700 rounded text-center dark:bg-neutral-800 dark:text-white">
-                    <span class="text-gray-400">:</span>
-                    <input type="number" value="${m}" min="0" max="59" step="5" onchange="updateKFBri(${i},'m',this.value)" class="w-12 px-1 py-0.5 border border-gray-200 dark:border-neutral-700 rounded text-center dark:bg-neutral-800 dark:text-white">
+                    <select onchange="updateKFBri(${i},'type',this.value)" class="px-1 py-0.5 border border-gray-200 dark:border-neutral-700 rounded text-center dark:bg-neutral-800 dark:text-white" style="font-size:10px">
+                        <option value="fixed" ${type === 'fixed' ? 'selected' : ''}>固定</option>
+                        <option value="sunrise" ${type === 'sunrise' ? 'selected' : ''}>日出</option>
+                        <option value="sunset" ${type === 'sunset' ? 'selected' : ''}>日落</option>
+                        <option value="civil_dawn" ${type === 'civil_dawn' ? 'selected' : ''}>曙光</option>
+                        <option value="civil_dusk" ${type === 'civil_dusk' ? 'selected' : ''}>暮光</option>
+                    </select>
+                    ${type === 'fixed' ? `
+                        <input type="number" value="${hr}" min="0" max="23" onchange="updateKFBri(${i},'h',this.value)" class="w-12 px-1 py-0.5 border border-gray-200 dark:border-neutral-700 rounded text-center dark:bg-neutral-800 dark:text-white">
+                        <span class="text-gray-400">:</span>
+                        <input type="number" value="${m}" min="0" max="59" step="5" onchange="updateKFBri(${i},'m',this.value)" class="w-12 px-1 py-0.5 border border-gray-200 dark:border-neutral-700 rounded text-center dark:bg-neutral-800 dark:text-white">
+                    ` : `
+                        <select onchange="updateKFBri(${i},'offsetSign',this.value)" class="w-8 px-1 py-0.5 border border-gray-200 dark:border-neutral-700 rounded text-center dark:bg-neutral-800 dark:text-white">
+                            <option value="+" ${offsetSign === '+' ? 'selected' : ''}>+</option>
+                            <option value="-" ${offsetSign === '-' ? 'selected' : ''}>-</option>
+                        </select>
+                        <input type="number" value="${offsetH}" min="0" max="5" onchange="updateKFBri(${i},'offsetH',this.value)" class="w-10 px-1 py-0.5 border border-gray-200 dark:border-neutral-700 rounded text-center dark:bg-neutral-800 dark:text-white">
+                        <span class="text-gray-400">h</span>
+                        <input type="number" value="${offsetM}" min="0" max="59" step="5" onchange="updateKFBri(${i},'offsetM',this.value)" class="w-10 px-1 py-0.5 border border-gray-200 dark:border-neutral-700 rounded text-center dark:bg-neutral-800 dark:text-white">
+                        <span class="text-gray-400">m</span>
+                        <span class="text-gray-400" style="font-size:9px">(${fmt(resolvedTime)})</span>
+                    `}
                     <span class="text-gray-400 mx-1">→</span>
-                    <input type="number" value="${bri}" min="${minB}" max="${maxB}" step="5" onchange="updateKFBri(${i},'b',this.value)" class="w-16 px-1 py-0.5 border border-gray-200 dark:border-neutral-700 rounded text-center dark:bg-neutral-800 dark:text-white">
+                    <input type="number" value="${bri}" min="${minB}" max="${maxB}" step="5" onchange="updateKFBri(${i},'bri',this.value)" class="w-16 px-1 py-0.5 border border-gray-200 dark:border-neutral-700 rounded text-center dark:bg-neutral-800 dark:text-white">
                     <span class="text-gray-500">%</span>
                     ${keyframesBri.length > 2 ? `<button onclick="deleteKFBri(${i})" class="ml-auto text-red-500 hover:text-red-700">×</button>` : ''}
                 </div>`;
@@ -805,18 +950,44 @@
             generateFormulaBri();
         }
 
-        function updateKFBri(i, type, val) {
+        function updateKFBri(i, field, val) {
             const minB = getVal('minBri'), maxB = 100;
-            if (type === 'h') {
-                const m = (keyframesBri[i].t % 1) * 60;
-                keyframesBri[i].t = Math.max(0, Math.min(24, parseInt(val) + m / 60));
-            } else if (type === 'm') {
-                const hr = Math.floor(keyframesBri[i].t);
-                keyframesBri[i].t = Math.max(0, Math.min(24, hr + parseInt(val) / 60));
-            } else if (type === 'b') {
-                keyframesBri[i].v = (parseInt(val) - minB) / (maxB - minB);
+            const kf = keyframesBri[i];
+            if (field === 'type') {
+                kf.type = val;
+                if (val === 'fixed') {
+                    kf.t = kf.t || 12;
+                    delete kf.offset;
+                } else {
+                    kf.offset = kf.offset || 0;
+                    delete kf.t;
+                }
+            } else if (field === 'h') {
+                const m = ((kf.t || 0) % 1) * 60;
+                kf.t = Math.max(0, Math.min(24, parseInt(val) + m / 60));
+            } else if (field === 'm') {
+                const hr = Math.floor(kf.t || 0);
+                kf.t = Math.max(0, Math.min(24, hr + parseInt(val) / 60));
+            } else if (field === 'offsetSign') {
+                kf.offset = (val === '+' ? 1 : -1) * Math.abs(kf.offset || 0);
+            } else if (field === 'offsetH') {
+                const sign = (kf.offset || 0) >= 0 ? 1 : -1;
+                const m = (Math.abs(kf.offset || 0) % 1) * 60;
+                kf.offset = sign * (parseInt(val) + m / 60);
+            } else if (field === 'offsetM') {
+                const sign = (kf.offset || 0) >= 0 ? 1 : -1;
+                const hr = Math.floor(Math.abs(kf.offset || 0));
+                kf.offset = sign * (hr + parseInt(val) / 60);
+            } else if (field === 'bri') {
+                kf.v = (parseInt(val) - minB) / (maxB - minB);
             }
-            keyframesBri.sort((a, b) => a.t - b.t);
+            const lat = getVal('latitudeBri');
+            const sunTimes = lat ? getSunTimes(lat) : null;
+            keyframesBri.sort((a, b) => {
+                const ta = sunTimes ? resolveKeyframeTime(a, sunTimes) : (a.t || 0);
+                const tb = sunTimes ? resolveKeyframeTime(b, sunTimes) : (b.t || 0);
+                return ta - tb;
+            });
             drawBri(); updateBri();
         }
 
@@ -825,8 +996,14 @@
         }
 
         function addKeyframeBri() {
-            keyframesBri.push({ t: 12, v: 0.5 });
-            keyframesBri.sort((a, b) => a.t - b.t);
+            keyframesBri.push({ type: 'fixed', t: 12, v: 0.5 });
+            const lat = getVal('latitudeBri');
+            const sunTimes = lat ? getSunTimes(lat) : null;
+            keyframesBri.sort((a, b) => {
+                const ta = sunTimes ? resolveKeyframeTime(a, sunTimes) : (a.t || 0);
+                const tb = sunTimes ? resolveKeyframeTime(b, sunTimes) : (b.t || 0);
+                return ta - tb;
+            });
             drawBri(); updateBri();
         }
 
@@ -837,31 +1014,28 @@
                 const sun = times.sun;
                 const civil = times.civil;
                 if (sun && civil) {
-                    // 使用曙暮光时间：从民用曙光开始渐亮，到民用暮光结束渐暗
                     keyframesBri = [
-                        { t: 0, v: 0 },
-                        { t: civil.rise, v: 0 },      // 民用曙光开始
-                        { t: sun.rise, v: 1 },        // 日出时达到最亮
-                        { t: sun.set, v: 1 },         // 日落前保持最亮
-                        { t: civil.set, v: 0 },       // 民用暮光结束
-                        { t: 24, v: 0 }
+                        { type: 'fixed', t: 0, v: 0 },
+                        { type: 'civil_dawn', offset: 0, v: 0 },
+                        { type: 'sunrise', offset: 0, v: 1 },
+                        { type: 'sunset', offset: 0, v: 1 },
+                        { type: 'civil_dusk', offset: 0, v: 0 },
+                        { type: 'fixed', t: 24, v: 0 }
                     ];
                 } else if (sun) {
-                    // 没有曙暮光数据时使用日出日落
                     keyframesBri = [
-                        { t: 0, v: 0 },
-                        { t: sun.rise, v: 0 },
-                        { t: sun.rise + 1, v: 1 },
-                        { t: sun.set - 1, v: 1 },
-                        { t: sun.set, v: 0 },
-                        { t: 24, v: 0 }
+                        { type: 'fixed', t: 0, v: 0 },
+                        { type: 'sunrise', offset: 0, v: 0 },
+                        { type: 'sunrise', offset: 1, v: 1 },
+                        { type: 'sunset', offset: -1, v: 1 },
+                        { type: 'sunset', offset: 0, v: 0 },
+                        { type: 'fixed', t: 24, v: 0 }
                     ];
                 } else {
-                    // 极昼或极夜
-                    keyframesBri = [{ t: 0, v: 0.5 }, { t: 12, v: 0.5 }];
+                    keyframesBri = [{ type: 'fixed', t: 0, v: 0.5 }, { type: 'fixed', t: 12, v: 0.5 }];
                 }
             } else {
-                keyframesBri = [{ t: 0, v: 0 }, { t: 12, v: 1 }];
+                keyframesBri = [{ type: 'fixed', t: 0, v: 0 }, { type: 'fixed', t: 12, v: 1 }];
             }
             drawBri(); updateBri();
         }
@@ -877,18 +1051,24 @@
                 return;
             }
 
-            const kf = [...keyframesBri].sort((a, b) => a.t - b.t);
+            // 解析关键帧时间
+            const sunTimes = getSunTimes(lat);
+            const resolved = keyframesBri.map(kf => ({
+                t: resolveKeyframeTime(kf, sunTimes),
+                v: kf.v
+            })).sort((a, b) => a.t - b.t);
+
             const time = '(hours()*3600+minutes()*60+seconds())';
 
-            const v0 = Math.round(minB + kf[0].v * (maxB - minB));
+            const v0 = Math.round(minB + resolved[0].v * (maxB - minB));
             const parts = [`${v0}`];
             const mathParts = [`${v0}`];
 
-            for (let i = 0; i < kf.length - 1; i++) {
-                const t1 = Math.round(kf[i].t * 3600);
-                const t2 = Math.round(kf[i + 1].t * 3600);
-                const v1 = Math.round(minB + kf[i].v * (maxB - minB));
-                const v2 = Math.round(minB + kf[i + 1].v * (maxB - minB));
+            for (let i = 0; i < resolved.length - 1; i++) {
+                const t1 = Math.round(resolved[i].t * 3600);
+                const t2 = Math.round(resolved[i + 1].t * 3600);
+                const v1 = Math.round(minB + resolved[i].v * (maxB - minB));
+                const v2 = Math.round(minB + resolved[i + 1].v * (maxB - minB));
                 const mid = Math.round((t1 + t2) / 2);
                 const width = Math.max(1, Math.round((t2 - t1) / 2));
                 const delta = v2 - v1;
@@ -901,7 +1081,14 @@
 
             const formula = `floor(${parts.join('+')})`;
             document.getElementById('formulaBri').textContent = formula;
-            document.getElementById('formulaLenBri').textContent = `公式长度: ${formula.length} 字符`;
+
+            // 添加日期警告
+            const hasAnchor = keyframesBri.some(kf => kf.type !== 'fixed');
+            const today = new Date();
+            const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+            const sun = sunTimes.sun;
+            const warning = hasAnchor ? `\n\n⚠️ 此公式基于 ${dateStr} 的日出日落时间计算\n   日出: ${sun ? fmt(sun.rise) : '--:--'}  日落: ${sun ? fmt(sun.set) : '--:--'}\n   建议每月重新生成以保持准确` : '';
+            document.getElementById('formulaLenBri').textContent = `公式长度: ${formula.length} 字符${warning}`;
             document.getElementById('formulaMathBri').innerHTML = `<b>数学形式:</b> floor(${mathParts.join(' + ')})`;
         }
 
