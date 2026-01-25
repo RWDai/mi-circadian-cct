@@ -310,6 +310,38 @@
 
         function fmt(h) { return `${Math.floor(h).toString().padStart(2, '0')}:${Math.floor((h % 1) * 60).toString().padStart(2, '0')}`; }
 
+        // 生成动态日出日落时间公式（米家极客版）
+        function generateDynamicSunTime(lat, angle, isRise, offset = 0) {
+            const latRad = lat * Math.PI / 180;
+            const sinLat = Math.sin(latRad).toFixed(4);
+            const cosLat = Math.cos(latRad).toFixed(4);
+            const sinAngle = Math.sin(angle * Math.PI / 180).toFixed(5);
+            const declCoef = (23.44 * Math.PI / 180).toFixed(4);
+            const dayCoef = (2 * Math.PI / 365).toFixed(4);
+            const hourCoef = (180 / Math.PI / 15).toFixed(2);
+
+            const day = `((month()-1)*30.5+date())`;
+            const decl = `(${declCoef}*sin(${dayCoef}*(${day}-81)))`;
+            const cosH = `((${sinAngle}-${sinLat}*sin(${decl}))/(${cosLat}*cos(${decl})))`;
+            const H = `(acos(${cosH})*${hourCoef})`;
+            const time = isRise ? `(12-${H})` : `(12+${H})`;
+            const offsetHours = offset ? `+${offset}` : '';
+            return `((${time}${offsetHours})*3600)`;
+        }
+
+        // 获取关键帧时间表达式（固定或动态）
+        function getTimeExpression(kf, lat) {
+            if (kf.type === 'fixed') {
+                return Math.round(kf.t * 3600);
+            }
+            const angleMap = {
+                sunrise: -0.833, sunset: -0.833,
+                civil_dawn: -6, civil_dusk: -6
+            };
+            const isRise = kf.type === 'sunrise' || kf.type === 'civil_dawn';
+            return generateDynamicSunTime(lat, angleMap[kf.type], isRise, kf.offset || 0);
+        }
+
         // Canvas
         function initCanvas() {
             canvas = document.getElementById('canvas');
@@ -616,12 +648,19 @@
                 return;
             }
 
-            // 解析关键帧时间
+            // 解析关键帧时间（用于预览和数学表达式）
             const sunTimes = getSunTimes(lat);
             const resolved = keyframes.map(kf => ({
                 t: resolveKeyframeTime(kf, sunTimes),
                 v: kf.v
             })).sort((a, b) => a.t - b.t);
+
+            // 排序后的原始关键帧（用于生成动态公式）
+            const sortedKf = [...keyframes].sort((a, b) => {
+                const ta = resolveKeyframeTime(a, sunTimes);
+                const tb = resolveKeyframeTime(b, sunTimes);
+                return ta - tb;
+            });
 
             const time = '(hours()*3600+minutes()*60+seconds())';
 
@@ -632,30 +671,29 @@
 
             // 叠加每个过渡的 sigmoid
             for (let i = 0; i < resolved.length - 1; i++) {
+                const t1Expr = getTimeExpression(sortedKf[i], lat);
+                const t2Expr = getTimeExpression(sortedKf[i + 1], lat);
                 const t1 = Math.round(resolved[i].t * 3600);
                 const t2 = Math.round(resolved[i + 1].t * 3600);
                 const v1 = Math.round(minT + resolved[i].v * (maxT - minT));
                 const v2 = Math.round(minT + resolved[i + 1].v * (maxT - minT));
-                const mid = Math.round((t1 + t2) / 2);
-                const width = Math.max(1, Math.round((t2 - t1) / 2));
+                const midExpr = typeof t1Expr === 'number' && typeof t2Expr === 'number'
+                    ? Math.round((t1Expr + t2Expr) / 2)
+                    : `((${t1Expr}+${t2Expr})/2)`;
+                const widthExpr = typeof t1Expr === 'number' && typeof t2Expr === 'number'
+                    ? Math.max(1, Math.round((t2Expr - t1Expr) / 2))
+                    : `((${t2Expr}-${t1Expr})/2)`;
                 const delta = v2 - v1;
 
                 if (delta !== 0) {
-                    parts.push(`${delta}/(1+pow(e(),-${k}*(${time}-${mid})/${width}))`);
-                    mathParts.push(`${delta} × σ(${k}×(t-${fmt(mid / 3600)})/${Math.round(width / 60)}min)`);
+                    parts.push(`${delta}/(1+pow(e(),-${k}*(${time}-${midExpr})/${widthExpr}))`);
+                    mathParts.push(`${delta} × σ(${k}×(t-${fmt(t1 / 3600 + (t2 - t1) / 7200)})/${Math.round((t2 - t1) / 120)}min)`);
                 }
             }
 
             const formula = `floor(${parts.join('+')})`;
             document.getElementById('formula').textContent = formula;
-
-            // 添加日期警告
-            const hasAnchor = keyframes.some(kf => kf.type !== 'fixed');
-            const today = new Date();
-            const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-            const sun = sunTimes.sun;
-            const warning = hasAnchor ? `\n\n⚠️ 此公式基于 ${dateStr} 的日出日落时间计算\n   日出: ${sun ? fmt(sun.rise) : '--:--'}  日落: ${sun ? fmt(sun.set) : '--:--'}\n   建议每月重新生成以保持准确` : '';
-            document.getElementById('formulaLen').textContent = `公式长度: ${formula.length} 字符${warning}`;
+            document.getElementById('formulaLen').textContent = `公式长度: ${formula.length} 字符`;
 
             // 数学表达式展示（KaTeX LaTeX 风格）
             const mathTerms = [];
@@ -786,7 +824,7 @@
         // 使用 sigmoid 叠加方式插值（与公式一致）
         function interpolateBri(t) {
             if (keyframesBri.length < 2) return 0.5;
-            const kf = [...keyframesBri].sort((a, b) => a.t - b.t);
+            const kf = getEffectiveKeyframesBri();
             const k = getVal('steepnessBri');
 
             // 起始值
@@ -1051,12 +1089,19 @@
                 return;
             }
 
-            // 解析关键帧时间
+            // 解析关键帧时间（用于预览和数学表达式）
             const sunTimes = getSunTimes(lat);
             const resolved = keyframesBri.map(kf => ({
                 t: resolveKeyframeTime(kf, sunTimes),
                 v: kf.v
             })).sort((a, b) => a.t - b.t);
+
+            // 排序后的原始关键帧（用于生成动态公式）
+            const sortedKf = [...keyframesBri].sort((a, b) => {
+                const ta = resolveKeyframeTime(a, sunTimes);
+                const tb = resolveKeyframeTime(b, sunTimes);
+                return ta - tb;
+            });
 
             const time = '(hours()*3600+minutes()*60+seconds())';
 
@@ -1065,30 +1110,29 @@
             const mathParts = [`${v0}`];
 
             for (let i = 0; i < resolved.length - 1; i++) {
+                const t1Expr = getTimeExpression(sortedKf[i], lat);
+                const t2Expr = getTimeExpression(sortedKf[i + 1], lat);
                 const t1 = Math.round(resolved[i].t * 3600);
                 const t2 = Math.round(resolved[i + 1].t * 3600);
                 const v1 = Math.round(minB + resolved[i].v * (maxB - minB));
                 const v2 = Math.round(minB + resolved[i + 1].v * (maxB - minB));
-                const mid = Math.round((t1 + t2) / 2);
-                const width = Math.max(1, Math.round((t2 - t1) / 2));
+                const midExpr = typeof t1Expr === 'number' && typeof t2Expr === 'number'
+                    ? Math.round((t1Expr + t2Expr) / 2)
+                    : `((${t1Expr}+${t2Expr})/2)`;
+                const widthExpr = typeof t1Expr === 'number' && typeof t2Expr === 'number'
+                    ? Math.max(1, Math.round((t2Expr - t1Expr) / 2))
+                    : `((${t2Expr}-${t1Expr})/2)`;
                 const delta = v2 - v1;
 
                 if (delta !== 0) {
-                    parts.push(`${delta}/(1+pow(e(),-${k}*(${time}-${mid})/${width}))`);
-                    mathParts.push(`${delta} × σ(${k}×(t-${fmt(mid / 3600)})/${Math.round(width / 60)}min)`);
+                    parts.push(`${delta}/(1+pow(e(),-${k}*(${time}-${midExpr})/${widthExpr}))`);
+                    mathParts.push(`${delta} × σ(${k}×(t-${fmt(t1 / 3600 + (t2 - t1) / 7200)})/${Math.round((t2 - t1) / 120)}min)`);
                 }
             }
 
             const formula = `floor(${parts.join('+')})`;
             document.getElementById('formulaBri').textContent = formula;
-
-            // 添加日期警告
-            const hasAnchor = keyframesBri.some(kf => kf.type !== 'fixed');
-            const today = new Date();
-            const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-            const sun = sunTimes.sun;
-            const warning = hasAnchor ? `\n\n⚠️ 此公式基于 ${dateStr} 的日出日落时间计算\n   日出: ${sun ? fmt(sun.rise) : '--:--'}  日落: ${sun ? fmt(sun.set) : '--:--'}\n   建议每月重新生成以保持准确` : '';
-            document.getElementById('formulaLenBri').textContent = `公式长度: ${formula.length} 字符${warning}`;
+            document.getElementById('formulaLenBri').textContent = `公式长度: ${formula.length} 字符`;
             document.getElementById('formulaMathBri').innerHTML = `<b>数学形式:</b> floor(${mathParts.join(' + ')})`;
         }
 
